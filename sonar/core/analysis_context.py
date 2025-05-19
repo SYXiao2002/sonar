@@ -1,3 +1,10 @@
+"""
+File Name: analysis_context.py
+Author: Yixiao Shen
+Date: 2025-05-19
+Purpose: Define analysis context
+"""
+
 from dataclasses import dataclass
 from typing import Optional
 

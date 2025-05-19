@@ -1,5 +1,5 @@
 """
-File Name: sliding_window.py
+File Name: window_selector.py
 Author: Yixiao Shen
 Date: 2025-05-15
 Purpose: Define sliding window configuration

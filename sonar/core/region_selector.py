@@ -1,5 +1,5 @@
 """
-File Name: xlim_range.py
+File Name: region_selector.py
 Author: Yixiao Shen
 Date: 2025-05-16
 Purpose: Define temporal region selection and cropping utilities for time series analysis.

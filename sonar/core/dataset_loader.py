@@ -4,8 +4,9 @@ Author: Yixiao Shen
 Date: 2025-05-15
 Purpose: Store raw multivariate time series from multiple subjects sharing a common time axis
 """
-from typing import List, Sequence, Union
+
 import numpy as np
+from typing import List, Sequence, Union
 from collections.abc import Sequence as ABCSequence
 
 class DatasetLoader:
