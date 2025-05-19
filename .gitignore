@@ -1,0 +1,8 @@
+.venv
+res
+out*
+.vscode
+*.log
+*.pyc
+tmp
+test.py
