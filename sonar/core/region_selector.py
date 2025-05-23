@@ -73,3 +73,48 @@ class RegionSelector:
 		cropped_time = time[start_idx:end_idx]
 
 		return cropped_ts_list, cropped_time
+	
+
+	def get_integer_ticks(self, ideal_num_ticks: int = 5) -> list[int]:
+		"""
+		Generate a list of approximately `ideal_num_ticks` evenly spaced integer ticks
+		between self.start_sec and self.end_sec.
+
+		Args:
+			ideal_num_ticks (int): Desired number of ticks (default: 5)
+
+		Returns:
+			List[int]: List of integer ticks
+		"""
+		start = int(np.floor(self.start_sec))
+		end = int(np.ceil(self.end_sec))
+		total_duration = end - start
+
+		if total_duration <= 0:
+			return [start]  # fallback: invalid range
+
+		# Compute raw step
+		raw_step = max(1, total_duration // (ideal_num_ticks - 1))
+
+		# Round step to a nice number: 1, 2, 5, 10, etc.
+		def round_step(s):
+			if s <= 1:
+				return 1
+			elif s <= 2:
+				return 2
+			elif s <= 5:
+				return 5
+			elif s <= 10:
+				return 10
+			else:
+				return int(round(s / 10)) * 10
+
+		step = round_step(raw_step)
+		ticks = list(range(start, end + 1, step))
+
+		# Ensure the last tick covers the end
+		if ticks[-1] < end:
+			ticks.append(ticks[-1] + step)
+
+		return ticks
+

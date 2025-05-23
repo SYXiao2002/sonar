@@ -5,4 +5,5 @@ out*
 *.log
 *.pyc
 tmp
-test.py
+script/test.py
+cache

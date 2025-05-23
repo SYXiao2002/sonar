@@ -66,8 +66,8 @@ def test_generate_simulated_hbo():
 	ds = DatasetLoader.generate_simulated_hbo(labels, n_channels, sr, duration, seed=42)
 
 	# Check types and sizes
-	assert len(ds.ts_l) == len(labels)
-	assert len(ds.ts_l[0]) == n_channels
+	assert len(ds.data_l) == len(labels)
+	assert len(ds.data_l[0]) == n_channels
 	assert len(ds.raw_time) == int(sr * duration)
 	assert ds.label_l == labels
 	assert ds.sr == sr
