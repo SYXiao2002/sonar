@@ -8,6 +8,7 @@ Purpose: Store raw multivariate time series from multiple subjects sharing a com
 import csv
 import hashlib
 import os
+from matplotlib import pyplot as plt
 import numpy as np
 from typing import List, NamedTuple, Sequence, Union
 from collections.abc import Sequence as ABCSequence
@@ -84,6 +85,31 @@ class DatasetLoader:
 		return (f"<DatasetLoader with {n_subjects} subjects, "
 				f"{n_timepoints} time points, labels: [{label_preview}]>")
 	
+	def plot_channel(self, subject_idx: int, channel_idx: int):
+		"""
+		Plot a specific channel vs. time for a given subject.
+
+		Parameters:
+			subject_idx: int
+				Index of the subject.
+			channel_idx: int
+				Index of the channel.
+		"""
+		subject = self.data_l[subject_idx]
+		signal = subject[channel_idx]
+
+		channel_name = self.ch_l[channel_idx] if self.ch_l else f'ch{channel_idx + 1}'
+		subject_label = self.label_l[subject_idx] if self.label_l else f'sub{subject_idx + 1}'
+
+		plt.figure(figsize=(10, 4))
+		plt.plot(self.raw_time, signal)
+		plt.title(f'{subject_label} - {channel_name}')
+		plt.xlabel('Time (s)')
+		plt.ylabel('Signal')
+		plt.grid(True)
+		plt.tight_layout()
+		plt.show()
+
 	def save_cache(self, path: str):
 		np.savez_compressed(
 			path,

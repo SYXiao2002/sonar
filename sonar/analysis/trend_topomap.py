@@ -173,13 +173,13 @@ class TrendTopomap():
 		"""
 		for sub_idx, ts_label in enumerate(self.dataset.label_l):
 			data = np.array(self.dataset[sub_idx])
-			time = self.dataset['time']
 			n_channels, n_times = data.shape
 
 			fig, (ax1, ax2, ax3) = plt.subplots(
-				nrows=3, ncols=1,
-				figsize=(12, 7),
-				gridspec_kw={'height_ratios': [4, 1, 1]},
+				nrows=3,
+				ncols=1,
+				figsize=(12, 9),
+				gridspec_kw={'height_ratios': [4, 1, 1, 1]},
 				sharex=True
 			)
 
@@ -207,6 +207,7 @@ class TrendTopomap():
 					start, end = region.get_xlim_range()
 					center = (start + end) / 2
 
+					# Skip if outside selected region
 					if not (self.region_selector.start_sec <= center <= self.region_selector.end_sec):
 						continue
 
@@ -216,46 +217,50 @@ class TrendTopomap():
 					valid_centers.append(center)
 					marker_sizes.append(marker_size)
 
-				if valid_centers:  # only call scatter if there's something to draw
+					# Draw horizontal line for the segment
+					ax1.hlines(y=ch_idx + 0.5, xmin=start, xmax=end, colors='blue', linewidth=1, zorder=2)
+
+				# Draw scatter points for segment centers
+				if valid_centers:
 					ax1.scatter(valid_centers, [ch_idx + 0.5] * len(valid_centers),
 								s=marker_sizes, color='red', zorder=3)
-
+					
 			# --- ax2: Annotations ---
-				ax2.set_ylabel("Event")
-				ax2.set_yticks([])
-				ax2.set_ylim(0, 1)
-				ax2.grid(True)
-				xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
-				ax2.set_xticks(xticks)
-				ax2.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
+			ax2.set_ylabel("Event")
+			ax2.set_yticks([])
+			ax2.set_ylim(0, 1)
+			ax2.grid(True)
+			xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
+			ax2.set_xticks(xticks)
+			ax2.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
 
-				label_colors = {}
+			label_colors = {}
 
-				def label_to_color(label):
-					# Create a consistent RGB colour from the hash of the label
-					h = hashlib.md5(label.encode()).hexdigest()
-					r = int(h[0:2], 16) / 255.0
-					g = int(h[2:4], 16) / 255.0
-					b = int(h[4:6], 16) / 255.0
-					return (r, g, b)
+			def label_to_color(label):
+				# Create a consistent RGB colour from the hash of the label
+				h = hashlib.md5(label.encode()).hexdigest()
+				r = int(h[0:2], 16) / 255.0
+				g = int(h[2:4], 16) / 255.0
+				b = int(h[4:6], 16) / 255.0
+				return (r, g, b)
 
-				for a in self.annotations:
-					if a.label not in label_colors:
-						label_colors[a.label] = label_to_color(a.label)
+			for a in self.annotations:
+				if a.label not in label_colors:
+					label_colors[a.label] = label_to_color(a.label)
 
-					rect = Rectangle(
-						(a.start, 0),
-						width=a.duration,
-						height=1,
-						color=label_colors[a.label],
-						alpha=0.5,
-						label=a.label
-					)
-					ax2.add_patch(rect)
+				rect = Rectangle(
+					(a.start, 0),
+					width=a.duration,
+					height=1,
+					color=label_colors[a.label],
+					alpha=0.5,
+					label=a.label
+				)
+				ax2.add_patch(rect)
 
-				handles, labels = ax2.get_legend_handles_labels()
-				by_label = dict(zip(labels, handles))
-				ax2.legend(by_label.values(), by_label.keys(), loc='upper right')
+			handles, labels = ax2.get_legend_handles_labels()
+			by_label = dict(zip(labels, handles))
+			ax2.legend(by_label.values(), by_label.keys(), loc='upper right')
 
 
 			# --- ax3: Hidden Calculation Line Plot ---
@@ -269,7 +274,33 @@ class TrendTopomap():
 				if total_curve:
 					x_vals = [item['center'] for item in total_curve]
 					y_vals = [item['count_sum'] for item in total_curve]
+
+					# Plot the curve
 					ax3.plot(x_vals, y_vals, color='blue', linewidth=1.5)
+
+					# Filter values within selected region
+					start_sec = self.region_selector.start_sec
+					end_sec = self.region_selector.end_sec
+					filtered_y = [y for x, y in zip(x_vals, y_vals) if start_sec <= x <= end_sec]
+					
+					thr=2
+					# Compute proportion of y > thr
+					if filtered_y:
+						num_above_threshold = sum(y > thr for y in filtered_y)
+						ratio = num_above_threshold / len(filtered_y)
+
+						# Annotate ratio
+						ax3.axhline(thr, color='gray', linestyle='--', linewidth=1)
+						ax3.text(start_sec, max(filtered_y) * 0.95, f">{thr} ratio = {ratio:.2f}", color='red', fontsize=8)
+
+					else:
+						ratio = np.nan  # or 0
+
+					# Save the result
+					if not hasattr(self, '_quantified_intensity'):
+						self._quantified_intensity = {}
+
+					self._quantified_intensity[sub_idx] = ratio
 
 			# --- Shared X limits ---
 			ax1.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)

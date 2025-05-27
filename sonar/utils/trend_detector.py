@@ -10,7 +10,6 @@ from typing import Literal, Optional, Sequence
 
 import numpy as np
 
-from script.dataset import get_dataset
 from sonar.core.analysis_context import AnalysisContext, SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader
 from sonar.core.region_selector import RegionSelector
@@ -148,7 +147,7 @@ class TrendDetector(AnalysisContext):
 	def example_demo2():
 		import numpy as np
 
-		dataset = get_dataset(debug=True, load_cache=False)
+		dataset = get_test_dataset(load_cache=False)
 
 		region_selector = RegionSelector(center_sec=5, length_sec=2)
 

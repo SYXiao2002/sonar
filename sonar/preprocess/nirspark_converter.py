@@ -41,7 +41,7 @@ def nirspark2csv(nirspark_export, sr, time_shifting=0):
 
 
 if __name__ == "__main__":
-	nirspark_export = "res/20250510wh_test/wh.csv"
+	nirspark_export = "res/traningcamp-nirspark/hc1-0.01-0.1hz.csv"
 	sr = 11
-	time_shifting = 0
+	time_shifting = 2219.354
 	nirspark2csv(nirspark_export, sr, time_shifting)
