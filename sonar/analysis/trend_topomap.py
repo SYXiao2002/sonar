@@ -4,6 +4,7 @@ Author: Yixiao Shen
 Date: 2025-05-19
 Purpose: Trend Topomap for individual
 """
+import csv
 import hashlib
 import os
 import pandas as pd
@@ -144,6 +145,29 @@ class TrendTopomap():
 
 	def set_region_selector(self, region_selector: RegionSelector):
 		self.region_selector = region_selector
+
+	def save_trends_to_csv(self, save_path: str):
+		"""
+		Save computed trends to a CSV file.
+		Each row: label (subject id), ch (channel), start, end
+		"""
+		if not hasattr(self, '_computed_trends') or not self._computed_trends:
+			raise ValueError("No computed trends found. Please run _compute_trends() first.")
+
+		rows = []
+
+		for sub_idx, trends in self._computed_trends.items():
+			label = self.dataset.label_l[sub_idx]
+			for ch_idx, trend_l in enumerate(trends):
+				for t in trend_l:
+					rows.append((label, ch_idx+1, t.start_sec, t.end_sec))
+
+		with open(save_path, mode='w', newline='', encoding='utf-8-sig') as f:
+			writer = csv.writer(f)
+			writer.writerow(['label', 'ch', 'start', 'end'])
+			writer.writerows(rows)
+
+		print(f"Saved computed trends to {save_path}")
 
 	def save_intensity_to_csv(self, output_dir):
 		"""
@@ -326,9 +350,50 @@ class TrendTopomap():
 
 		window_selector = WindowSelector(window_size=2, step=0.1)
 		trend_topomap = TrendTopomap(dataset, window_selector=window_selector, mode='increasing', min_duration=1.6, annotations=annotations, region_selector=None, debug=False)
-		trend_topomap.save_intensity_to_csv(output_dir='out/test')
-		trend_topomap.plot_trends(output_dir='out/test')
+		trend_topomap.save_intensity_to_csv(output_dir='out/test/intensity_raw')
+		trend_topomap.plot_trends(output_dir='out/test/trends_fig')
+		trend_topomap.save_trends_to_csv(save_path='out/test/trends_raw.csv')
 
+def save_binary_ts_by_subject(csv_path, output_dir, sample_rate):
+	"""
+	Convert trend segments to binary time series and save one CSV per subject.
+	Each file includes columns: time, ch0, ch1, ...
+	:param csv_path: CSV path with columns: label, ch, start, end
+	:param output_dir: Folder to save subject-wise CSVs
+	:param sample_rate: Sampling rate in Hz
+	"""
+	df = pd.read_csv(csv_path)
+
+	# 时间轴范围
+	start_time = df['start'].min()
+	end_time = df['end'].max()
+	n_points = int(np.ceil((end_time - start_time) * sample_rate)) + 1
+	time_axis = np.linspace(start_time, end_time, n_points)
+
+	# 创建输出文件夹
+	os.makedirs(output_dir, exist_ok=True)
+
+	for subject_label, subject_df in df.groupby('label'):
+		ch_dict = {}
+
+		for ch, ch_df in subject_df.groupby('ch'):
+			binary_array = np.zeros_like(time_axis)
+			for _, row in ch_df.iterrows():
+				start_idx = int((row['start'] - start_time) * sample_rate)
+				end_idx = int((row['end'] - start_time) * sample_rate)
+				binary_array[start_idx:end_idx + 1] = 1
+			ch_dict[f'ch{ch+1}'] = binary_array
+
+		# 构建 DataFrame
+		df_out = pd.DataFrame({'time': time_axis})
+		for ch_col, bin_seq in ch_dict.items():
+			df_out[ch_col] = bin_seq
+
+		# 保存
+		save_path = os.path.join(output_dir, f"{subject_label}.csv")
+		df_out.to_csv(save_path, index=False)
+		print(f"Saved: {save_path}")
 
 if __name__ == "__main__":
 	TrendTopomap.example()
+	save_binary_ts_by_subject('out/test/trends_raw.csv', output_dir='out/test/binery_trends_raw', sample_rate=1.0)

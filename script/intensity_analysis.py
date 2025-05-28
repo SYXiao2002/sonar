@@ -3,7 +3,6 @@ from tqdm import tqdm
 
 from sonar.analysis.intensity_analysis import Peak
 from sonar.analysis.trend_topomap import TrendTopomap
-from sonar.core import region_selector
 from sonar.core.dataset_loader import get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector

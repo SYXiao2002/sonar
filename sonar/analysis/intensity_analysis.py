@@ -1,6 +1,9 @@
+import os
 from typing import Optional, Sequence
 import numpy as np
-from scipy.ndimage import uniform_filter1d, label
+import pandas as pd
+import scipy
+from scipy.ndimage import uniform_filter1d
 import matplotlib.pyplot as plt
 import csv
 
@@ -65,7 +68,7 @@ class IntensityAnalyzer:
 		:return: List of Peak(start_sec, end_sec, peak_time, peak_value)
 		"""
 		mask = values > self.threshold
-		labeled_array, num_features = label(mask)
+		labeled_array, num_features = scipy.ndimage.measurements.label(mask)
 
 		segments: Sequence[Peak] = []
 		for i in range(1, num_features + 1):
@@ -135,44 +138,75 @@ class IntensityAnalyzer:
 		else:
 			plt.close()
 
-	def save(self, output_path, label='unknown'):
+
+	def save(self, output_path, label='unknown') -> pd.DataFrame:
 		"""
-		Save detected peak segments to CSV in the format: TIME, VALUE, DURATION, LABEL.
+		Save detected peak segments to CSV in the format:
+		TIME, VALUE, DURATION, LABEL, peak_time, peak_value
 
 		:param output_path: Path to output CSV file.
 		:param label: Label name to associate with all segments.
+		:return: DataFrame of saved segments.
 		"""
 		if not self.segments:
 			raise RuntimeError("No segments to save. Run analyze() first.")
 
-		with open(output_path, mode='w', newline='', encoding='utf-8-sig') as f:
-			writer = csv.DictWriter(f, fieldnames=['TIME', 'VALUE', 'DURATION', 'LABEL', 'peak_time', 'peak_value'])
-			writer.writeheader()
-			for seg in self.segments:
-				writer.writerow({
-					'TIME': seg.start_sec,
-					'VALUE': 1,
-					'DURATION': seg.length_sec,
-					'LABEL': label,
-					'peak_time': seg.peak_time,
-					'peak_value': int(seg.peak_value)
-				})
-		print(f"Saved peak segments to {output_path}")
+		# 构造 DataFrame
+		data = [{
+			'TIME': seg.start_sec,
+			'VALUE': 1,
+			'DURATION': seg.length_sec,
+			'LABEL': label,
+			'peak_time': seg.peak_time,
+			'peak_value': int(seg.peak_value)
+		} for seg in self.segments]
 
+		df = pd.DataFrame(data)
+
+		# 保存 CSV
+		df.to_csv(output_path, index=False, encoding='utf-8-sig')
+		print(f"[✓] Saved peak segments to {output_path}")
+
+		return df
+
+	@staticmethod
+	def example():
+		csv_path = 'res/test/intensity_increasing_ALL_1.6s.csv'
+
+		times = []
+		values = []
+		with open(csv_path, newline='', encoding='utf-8-sig') as f:
+			reader = csv.DictReader(f)
+			for row in reader:
+				times.append(float(row['time']))
+				values.append(float(row['value']))
+
+		analyzer = IntensityAnalyzer(times, values, smooth_size=30, threshold=30)
+		analyzer.save('out/intensity_peaks.csv')
 
 
 if __name__ == '__main__':
-	csv_path = 'out/min_duation_1.6s/intensity_increasing_HC1_1.6s.csv'
+	csv_path = 'res/test/intensity_peaks_all.csv'
+	output_dir = 'out/test/intensity_peaks/'
 
-	times = []
-	values = []
-	with open(csv_path, newline='', encoding='utf-8-sig') as f:
-		reader = csv.DictReader(f)
-		for row in reader:
-			times.append(float(row['time']))
-			values.append(float(row['value']))
+	os.makedirs(output_dir, exist_ok=True)
 
-	analyzer = IntensityAnalyzer(times, values, smooth_size=30, threshold=30)
-	analyzer.plot()
-	analyzer.save('out/intensity_peaks.csv')
+	# Step 1: 使用 pandas 读取并按 label 分组
+	df = pd.read_csv(csv_path, encoding='utf-8-sig')
 
+	# 安全性检查
+	required_columns = {'label', 'time', 'value'}
+	if not required_columns.issubset(df.columns):
+		raise ValueError(f"Missing required columns in CSV: {required_columns - set(df.columns)}")
+
+	# Step 2: 分组并分析每个 label 的数据
+	for label_name, group_df in df.groupby('label'):
+		analyzer = IntensityAnalyzer(
+			times=group_df['time'].tolist(),
+			values=group_df['value'].tolist(),
+			smooth_size=30,
+			threshold=30
+		)
+		save_path = os.path.join(output_dir, f'intensity_peaks_{label_name}.csv')
+		analyzer.save(save_path)
+		print(f"[✓] Saved: {save_path}")
