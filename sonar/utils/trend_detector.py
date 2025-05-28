@@ -15,6 +15,10 @@ from sonar.core.dataset_loader import DatasetLoader
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
 
+class Trend(RegionSelector):
+	def __init__(self, start_sec: float, end_sec: float, height: float):
+		super().__init__(start_sec=start_sec, end_sec=end_sec)
+		self.height = height
 
 class TrendDetector(AnalysisContext):
 	def __init__(
@@ -31,7 +35,7 @@ class TrendDetector(AnalysisContext):
 		time: Sequence[float],
 		min_duration: float = 3.0,
 		mode: Literal['increasing', 'decreasing'] = 'increasing',
-	) -> Sequence[RegionSelector]:
+	) -> Sequence[Trend]:
 		if len(data) != len(time):
 			raise ValueError("data and time must have the same length")
 
@@ -42,7 +46,7 @@ class TrendDetector(AnalysisContext):
 		# Pad to match time length (delta is len-1)
 		delta_sign = np.concatenate([[False], delta_sign])
 
-		segments = []
+		trends: Sequence[Trend] = []
 		start_idx = None
 
 		for i, is_mono in enumerate(delta_sign):
@@ -52,7 +56,8 @@ class TrendDetector(AnalysisContext):
 				start_time = time[start_idx]
 				end_time = time[i - 1]
 				if end_time - start_time >= min_duration:
-					segments.append(RegionSelector(start_sec=start_time, end_sec=end_time))
+					height = data[start_idx] - data[i-1]
+					trends.append(Trend(start_sec=start_time, end_sec=end_time, height=height))
 				start_idx = None
 
 		# Handle last segment
@@ -60,16 +65,17 @@ class TrendDetector(AnalysisContext):
 			start_time = time[start_idx]
 			end_time = time[-1]
 			if end_time - start_time >= min_duration:
-				segments.append(RegionSelector(start_sec=start_time, end_sec=end_time))
+				height = data[start_idx] - data[i-1]
+				trends.append(Trend(start_sec=start_time, end_sec=end_time, height=height))
 
-		return segments
+		return trends
 
 	def detect_trends(
 		self,
 		sc_context: Sequence[SubjectChannel],
 		mode: Literal['increasing', 'decreasing'] = 'increasing',
 		min_duration: float = 1.0
-	) -> Sequence[RegionSelector]:
+	) -> Sequence[Trend]:
 		raw_time = self.dataset['time']
 		data = self.dataset[sc_context[0].sub_idx][sc_context[0].ch_idx]
 
@@ -78,9 +84,9 @@ class TrendDetector(AnalysisContext):
 			data = cropped_data[0]
 			raw_time = cropped_time
 
-		segments = self._find_monotonic_segments(data, raw_time, min_duration=min_duration, mode=mode)
+		trend_l = self._find_monotonic_segments(data, raw_time, min_duration=min_duration, mode=mode)
 
-		return segments
+		return trend_l
 
 	def plot_trends(
 		self,

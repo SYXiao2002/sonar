@@ -14,12 +14,14 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
+from sonar.analysis.intensity_analysis import IntensityAnalyzer
 from sonar.core.analysis_context import SubjectChannel
-from sonar.core.dataset_loader import DatasetLoader
+from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
+from sonar.preprocess.normalization import normalize_to_range
 from sonar.preprocess.sv_marker import Annotation
-from sonar.utils.trend_detector import TrendDetector
+from sonar.utils.trend_detector import Trend, TrendDetector
 
 
 class TrendTopomap():
@@ -48,10 +50,10 @@ class TrendTopomap():
 		self.region_selector = region_selector
 
 		# Save computed results
-		self._computed_segments: Dict[int, Sequence[RegionSelector]] = {}
+		self._computed_trends: Dict[int, Sequence[Trend]] = {}
 
 		self._compute_trends()
-		self._compute_hidden_calculation()
+		self._compute_intensity()
 
 		print("TrendTopomap initialized.")
 
@@ -65,28 +67,27 @@ class TrendTopomap():
 			data = np.array(self.dataset[sub_idx])
 			n_channels = data.shape[0]
 
-			sub_segments = []
+			trends_l = []
 			for ch_idx in tqdm(range(n_channels), desc=f"Detecting trends for {ts_label}", leave=False):
 				sc_context = [SubjectChannel(sub_idx, ch_idx)]
-				segments = td.detect_trends(
+				trends = td.detect_trends(
 					sc_context,
 					mode=self.mode,
 					min_duration=self.min_duration
 				)
-				sub_segments.append(segments)
-			self._computed_segments[sub_idx] = sub_segments
+				trends_l.append(trends)
+			self._computed_trends[sub_idx] = trends_l
 
-	def _compute_hidden_calculation(self, window_selector: Optional[WindowSelector] = None):
+	def _compute_intensity(self, window_selector: Optional[WindowSelector] = None):
 		"""
 		For each subject and each channel, slide a window (2s, 50%) 
-		and count how many computed segments have their midpoints 
-		within the window.
+		and count how many computed segments overlap with each window.
 		"""
-		hidden_results = {}
+		intensity_l = {}
 		if window_selector is not None:
 			self.window_selector = window_selector
 
-		for sub_idx, ch_segments in tqdm(self._computed_segments.items(), desc="Subjects"):
+		for sub_idx, ch_trends in tqdm(self._computed_trends.items(), desc="Subjects"):
 			time_array = self.dataset['time']
 			start_time = time_array[0]
 			end_time = time_array[-1]
@@ -98,27 +99,26 @@ class TrendTopomap():
 			sub_hidden = []
 			total_counts = []
 
-			for ch_idx, segments in tqdm(
-				enumerate(ch_segments),
-				total=len(ch_segments),
+			for ch_idx, trends in tqdm(
+				enumerate(ch_trends),
+				total=len(ch_trends),
 				desc=f"Channels (sub {sub_idx})",
 				leave=False
 			):
 				channel_hidden = []
 
-				# Precompute and sort midpoints
-				midpoints = np.array([(seg.start_sec + seg.end_sec) / 2 for seg in segments])
-				midpoints.sort()  # if already sorted, you can skip this line
-
 				# Precompute all window start and end times
 				win_starts = start_time + np.arange(num_windows) * step_size
 				win_ends = win_starts + window_size
 
-				# Use searchsorted to efficiently count midpoints in each window
-				start_indices = np.searchsorted(midpoints, win_starts, side='left')
-				end_indices = np.searchsorted(midpoints, win_ends, side='left')
-
-				counts = end_indices - start_indices
+				# Count number of segments overlapping with each window
+				counts = []
+				for win_start, win_end in zip(win_starts, win_ends):
+					count = sum(
+						not (seg.end_sec <= win_start or seg.start_sec >= win_end)
+						for seg in trends
+					)
+					counts.append(count)
 
 				# Build result
 				channel_hidden = [
@@ -128,7 +128,6 @@ class TrendTopomap():
 
 				sub_hidden.append(channel_hidden)
 
-
 			# after all channels processed
 			for w_idx in range(num_windows):
 				win_start, win_end = sub_hidden[0][w_idx]['window']
@@ -136,41 +135,59 @@ class TrendTopomap():
 				count_sum = sum(ch_hidden[w_idx]['count'] for ch_hidden in sub_hidden)
 				total_counts.append({'center': center, 'count_sum': count_sum})
 
-			hidden_results[sub_idx] = {
+			intensity_l[sub_idx] = {
 				'per_channel': sub_hidden,
-				'total_curve': total_counts
+				'intensity_l': total_counts
 			}
 
-		self._hidden_calculation = hidden_results
+		self.intensity_l = intensity_l
 
 	def set_region_selector(self, region_selector: RegionSelector):
 		self.region_selector = region_selector
 
-	def save_total_curve_to_csv(self, output_dir):
+	def save_intensity_to_csv(self, output_dir):
 		"""
-		Save only the 'total_curve' part of hidden calculation to a CSV file.
+		Save the 'intensity' part of hidden calculation:
+		- A combined 'all subjects' CSV file
+		- One CSV file per subject
 		"""
-		records = []
+		if not os.path.exists(output_dir): 
+			os.makedirs(output_dir)
 
-		for sub_idx, sub_data in self._hidden_calculation.items():
-			for entry in sub_data.get('total_curve', []):
-				records.append({
-					'sub_idx': sub_idx,
-					'sub_label': self.dataset.label_l[sub_idx],
-					'center_time': entry['center'],
-					'count_sum': entry['count_sum']
-				})
+		all_records = []
 
-		df = pd.DataFrame(records)
-		csv_path = f'total_curve_{self.mode}_{self.min_duration}s.csv'
-		csv_path = os.path.join(output_dir, csv_path)
-		df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+		for sub_idx, sub_data in self.intensity_l.items():
+			records = []
+
+			for entry in sub_data.get('intensity_l', []):	# use renamed field
+				record = {
+					'label': self.dataset.label_l[sub_idx],
+					'time': entry['center'],
+					'value': entry['count_sum']
+				}
+				records.append(record)
+				all_records.append(record)
+
+			# Save per-subject CSV
+			df_sub = pd.DataFrame(records)
+			sub_label = self.dataset.label_l[sub_idx]
+			csv_name = f'intensity_{self.mode}_{sub_label}_{self.min_duration}s.csv'
+			csv_path = os.path.join(output_dir, csv_name)
+			df_sub.to_csv(csv_path, index=False, encoding='utf-8-sig')
+
+		# Save combined CSV
+		df_all = pd.DataFrame(all_records)
+		csv_path_all = os.path.join(output_dir, f'intensity_{self.mode}_ALL_{self.min_duration}s.csv')
+		df_all.to_csv(csv_path_all, index=False, encoding='utf-8-sig')
+
 
 
 	def plot_trends(self, output_dir):
 		"""
 		Plot trend segments using existing or loaded computed results.
 		"""
+		if not os.path.exists(output_dir): 
+			os.makedirs(output_dir)
 		for sub_idx, ts_label in enumerate(self.dataset.label_l):
 			data = np.array(self.dataset[sub_idx])
 			n_channels, n_times = data.shape
@@ -178,8 +195,8 @@ class TrendTopomap():
 			fig, (ax1, ax2, ax3) = plt.subplots(
 				nrows=3,
 				ncols=1,
-				figsize=(12, 9),
-				gridspec_kw={'height_ratios': [4, 1, 1, 1]},
+				figsize=(12, 7),
+				gridspec_kw={'height_ratios': [4, 1, 1]},
 				sharex=True
 			)
 
@@ -197,31 +214,31 @@ class TrendTopomap():
 			ax1.grid(True)
 
 			# Draw trend segments
-			sub_segments = self._computed_segments.get(sub_idx, [])
+			trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
 
-			for ch_idx, ch_segments in enumerate(sub_segments):
+			for ch_idx, trend_l in enumerate(trends):
 				valid_centers = []
 				marker_sizes = []
 
-				for region in ch_segments:
-					start, end = region.get_xlim_range()
+				for trend in trend_l:
+					trend: Trend
+					start, end = trend.get_xlim_range()
 					center = (start + end) / 2
 
 					# Skip if outside selected region
 					if not (self.region_selector.start_sec <= center <= self.region_selector.end_sec):
 						continue
 
-					length = end - start
-					marker_size = length / 4
-
 					valid_centers.append(center)
-					marker_sizes.append(marker_size)
+					marker_sizes.append(trend.height)
 
 					# Draw horizontal line for the segment
 					ax1.hlines(y=ch_idx + 0.5, xmin=start, xmax=end, colors='blue', linewidth=1, zorder=2)
 
+
 				# Draw scatter points for segment centers
 				if valid_centers:
+					marker_sizes = normalize_to_range(marker_sizes, min_val=1, max_val=10)
 					ax1.scatter(valid_centers, [ch_idx + 0.5] * len(valid_centers),
 								s=marker_sizes, color='red', zorder=3)
 					
@@ -268,40 +285,26 @@ class TrendTopomap():
 			ax3.set_xlabel("Time (s)")
 			ax3.grid(True)
 
-			hidden_data = self._hidden_calculation.get(sub_idx, {})
-			if hidden_data:
-				total_curve = hidden_data.get('total_curve', [])
-				if total_curve:
-					x_vals = [item['center'] for item in total_curve]
-					y_vals = [item['count_sum'] for item in total_curve]
+			intensity_data = self.intensity_l.get(sub_idx, {})
+			if intensity_data:
+				intensity = intensity_data.get('intensity_l', [])
+				if intensity:
+					x_vals = [item['center'] for item in intensity]
+					y_vals = [item['count_sum'] for item in intensity]
 
 					# Plot the curve
-					ax3.plot(x_vals, y_vals, color='blue', linewidth=1.5)
+					thr=30
+					ax3.hlines(y=thr, xmin=self.region_selector.start_sec, xmax=self.region_selector.end_sec, label =f'thr={thr}', color='red', linestyle='--', linewidth=1)
+					analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr)
+					ax3.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
+					ax3.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
+					ax3.legend()
 
-					# Filter values within selected region
-					start_sec = self.region_selector.start_sec
-					end_sec = self.region_selector.end_sec
-					filtered_y = [y for x, y in zip(x_vals, y_vals) if start_sec <= x <= end_sec]
+					for analyzer_seg in analyzer.segments:
+						mask = (analyzer.times >= analyzer_seg.start_sec) & (analyzer.times <= analyzer_seg.end_sec)
+						ax3.plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
+
 					
-					thr=2
-					# Compute proportion of y > thr
-					if filtered_y:
-						num_above_threshold = sum(y > thr for y in filtered_y)
-						ratio = num_above_threshold / len(filtered_y)
-
-						# Annotate ratio
-						ax3.axhline(thr, color='gray', linestyle='--', linewidth=1)
-						ax3.text(start_sec, max(filtered_y) * 0.95, f">{thr} ratio = {ratio:.2f}", color='red', fontsize=8)
-
-					else:
-						ratio = np.nan  # or 0
-
-					# Save the result
-					if not hasattr(self, '_quantified_intensity'):
-						self._quantified_intensity = {}
-
-					self._quantified_intensity[sub_idx] = ratio
-
 			# --- Shared X limits ---
 			ax1.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
 			ax2.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
@@ -317,3 +320,15 @@ class TrendTopomap():
 				plt.savefig(figure_path, dpi=600)
 			plt.close()
 
+	@staticmethod
+	def example():
+		dataset, annotations = get_dataset(ds_dir='res/test', load_cache=False)
+
+		window_selector = WindowSelector(window_size=2, step=0.1)
+		trend_topomap = TrendTopomap(dataset, window_selector=window_selector, mode='increasing', min_duration=1.6, annotations=annotations, region_selector=None, debug=False)
+		trend_topomap.save_intensity_to_csv(output_dir='out/test')
+		trend_topomap.plot_trends(output_dir='out/test')
+
+
+if __name__ == "__main__":
+	TrendTopomap.example()

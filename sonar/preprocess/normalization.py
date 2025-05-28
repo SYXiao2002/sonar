@@ -1,6 +1,20 @@
+import numpy as np
 import pandas as pd
 import os
 
+def normalize_to_range(arr, min_val, max_val):
+	"""
+	Normalize array to [min_val, max_val]
+	"""
+	arr = np.array(arr)
+	x_min = arr.min()
+	x_max = arr.max()
+	if x_max == x_min:
+		return np.full_like(arr, (min_val + max_val) / 2)  # avoid division by zero
+
+	# Linear normalization
+	norm_arr = min_val + (arr - x_min) / (x_max - x_min) * (max_val - min_val)
+	return norm_arr
 
 def hbo_normalize(file_path):
      z_score_normalization(file_path)
