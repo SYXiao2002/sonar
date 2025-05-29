@@ -51,7 +51,8 @@ def single(out_dir):
 	
 	window_selector = WindowSelector(window_size=1, step=0.1)
 	min_duration = 1.6
-	region_selector = RegionSelector(start_sec=2250, end_sec=4950)
+	region_selector = RegionSelector(start_sec=2250, length_sec=850)
+	# region_selector = RegionSelector(start_sec=2250, end_sec=4950)
 
 	out_dir = os.path.join('out', f'{folder_name}_min_duation_{min_duration:.1f}s')
 	os.makedirs(out_dir, exist_ok=True)
@@ -91,5 +92,5 @@ def single(out_dir):
 
 if __name__ == "__main__":
 	# main()
-	single('res/trainingcamp-nirspark')
+	single('res/test')
 	

@@ -89,7 +89,7 @@ def plot_ch_count_heatmap(freq_dict, label, output_dir):
 	# === 绘制背景结构等（如需） ===
 	plot_anatomical_labels(plt, 2)
 
-	plt.suptitle(f'Topomap: Channel Contribution Rate, {label}, n={len(freq_dict)}', fontsize=14)
+	plt.suptitle(f'Topomap: Channel Contribution Rate, {label}', fontsize=14)
 	plt.savefig(os.path.join(output_dir, f"{label}.png"), dpi = 600)
 
 
