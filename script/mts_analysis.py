@@ -5,129 +5,98 @@ Date: 2025-05-28
 Purpose: Multi-channel Trend Synchrony
 """
 
-from dataclasses import dataclass
-import os
 
-from matplotlib.pylab import f
+import os
+from matplotlib import cm, colors, pyplot as plt
 import numpy as np
 import pandas as pd
 
-from sonar.analysis.intensity_analysis import IntensityAnalyzer
-
-from typing import List
+from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
 
 
-@dataclass
-class ChannelData:
-	label: str
-	times: List[float]
-	values: List[float]
+def compute_channel_event_participation(peak_csv_path, bin_csv_path):
+	# 读取峰值（MTS事件）数据
+	df_peaks = pd.read_csv(peak_csv_path)
+	events = [(start, start + dur) for start, dur in zip(df_peaks['TIME'], df_peaks['DURATION'])]
 
-class PeakAnalysisPipeline:
-	def __init__(self, csv_path: str, output_dir: str, smooth_size: int = 50, threshold: int = 30):
-		self.csv_path = csv_path
-		self.output_dir = output_dir
-		self.smooth_size = smooth_size
-		self.threshold = threshold
-		self.required_columns = {'label', 'time', 'value'}
-		self.data: List[ChannelData] = []
+	total_events = len(events)
+	if total_events == 0:
+		raise ValueError("No MTS events found.")
 
-	def load_data(self):
-		df = pd.read_csv(self.csv_path, encoding='utf-8-sig')
+	# 读取二值趋势矩阵
+	df_bin = pd.read_csv(bin_csv_path)
+	time_arr = df_bin['time'].values
+	ch_cols = [col for col in df_bin.columns if col.startswith('ch')]
 
-		if not self.required_columns.issubset(df.columns):
-			raise ValueError(f"Missing required columns in CSV: {self.required_columns - set(df.columns)}")
+	# 初始化通道参与事件的次数
+	ch_freq = {ch: 0 for ch in ch_cols}
 
-		self.data = [
-			ChannelData(label=label, times=group['time'].tolist(), values=group['value'].tolist())
-			for label, group in df.groupby('label')
-		]
+	for start, end in events:
+		# 获取该事件窗口的所有行
+		mask = (time_arr >= start) & (time_arr <= end)
+		event_data = df_bin.loc[mask, ch_cols]
 
-	def analyze_and_save(self) -> pd.DataFrame:
-		os.makedirs(self.output_dir, exist_ok=True)
-		results = []
+		# 检查每个通道是否至少出现过1次“1”
+		for ch in ch_cols:
+			if event_data[ch].any():
+				ch_freq[ch] += 1
 
-		for channel_data in self.data:
-			analyzer = IntensityAnalyzer(
-				times=channel_data.times,
-				values=channel_data.values,
-				smooth_size=self.smooth_size,
-				threshold=self.threshold
-			)
-			save_path = os.path.join(self.output_dir, f'intensity_peaks_{channel_data.label}.csv')
-			result_df = analyzer.save(save_path, label=channel_data.label)
-			results.append(result_df)
+	# 转为百分比
+	ch_percent = {ch: freq / total_events * 100 for ch, freq in ch_freq.items()}
 
-		all_results = pd.concat(results, ignore_index=True)
-		combined_path = os.path.join(self.output_dir, 'intensity_peaks_all.csv')
-		all_results.to_csv(combined_path, index=False)
-		print(f"[✓] All results saved to: {combined_path}")
-		return all_results
-	
+	return ch_percent
 
-	@staticmethod
-	def example():
-		csv_path = 'res/test/intensity_peaks_all.csv'
-		output_dir = 'out/intensity_peaks/'
+def plot_ch_count_heatmap(freq_dict, label, output_dir):
+	fig = plt.figure(figsize=(12, 8))
+	main_ax = fig.add_subplot(111)
+	main_ax.axis('off')
+	os.makedirs(output_dir, exist_ok=True)
 
-		pipeline = PeakAnalysisPipeline(csv_path, output_dir)
-		pipeline.load_data()
-		all_df = pipeline.analyze_and_save()
+	box_width = 0.07
+	box_height = 0.10
 
-def compute_channel_mts_frequency_from_mts(trend_csv_path, binary_csv_path):
-	"""
-	基于已知的 MTS 事件段，统计每个通道参与次数
-	:param trend_csv_path: trends_raw.csv（MTS事件已提取：每组start+end为一个MTS）
-	:param binary_csv_path: 二值趋势CSV（time, ch0, ch1, ...）
-	:return: dict, 每个通道对应的参与频率，如 {'ch0': 5, 'ch1': 2, ...}
-	"""
-	# 读取数据
-	trend_df = pd.read_csv(trend_csv_path)
-	binary_df = pd.read_csv(binary_csv_path)
+	# === 加载通道位置信息 ===
+	metadata_path = "res/test/snirf_metadata.csv"
+	ch_pos_l, ch_name_l = get_meta_data(metadata_path)
+	ch_pos_l = normalize_positions(ch_pos_l, box_width, box_height, x_range=(0.02, 0.9), y_range=(0.05, 0.9))
 
-	# 只分析一个 label（一个被试）
-	label = trend_df['label'].unique()[0]
-	trend_df = trend_df[trend_df['label'] == label]
+	# === 频率值归一化到 0~1，用于映射颜色 ===
+	values = list(freq_dict.values())
+	norm = colors.Normalize(vmin=85, vmax=100)
+	cmap = cm.get_cmap('gist_yarg')  # 可换为 'hot' 'viridis' 等
 
-	# 二值时间序列
-	time_arr = binary_df['time'].values
-	binary_arr = binary_df.drop(columns=['time']).values
-	n_channels = binary_arr.shape[1]
+	for ch_idx, (x, y) in enumerate(ch_pos_l):
+		x0 = x - box_width / 2
+		y0 = y - box_height / 2
+		ax_inset = fig.add_axes([x0, y0, box_width, box_height])
+		ax_inset.set_xticks([])
+		ax_inset.set_yticks([])
 
-	# 按 start+end 分组认为是一个 MTS
-	mts_events = trend_df.groupby(['start', 'end'])
+		# === 获取频率值和颜色 ===
+		key = f'ch{ch_idx+1}'
+		val = freq_dict.get(key, 0)
+		color = cmap(norm(val))
+		ax_inset.set_title(f'Ch{ch_idx+1}: {int(val)}%', fontsize=7, pad=2)
 
-	# 初始化通道参与次数
-	ch_count = np.zeros(n_channels, dtype=int)
+		# === 用颜色填满整个子图 ===
+		ax_inset.set_facecolor(color)
 
-	for (start, end), _ in mts_events:
-		# 找出时间段对应的索引
-		start_idx = np.searchsorted(time_arr, start, side='left')
-		end_idx = np.searchsorted(time_arr, end, side='right')
+	# === 添加颜色条 ===
+	cbar_ax = fig.add_axes([0.92, 0.2, 0.015, 0.6])
+	cbar=plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+	cbar.set_label('Contribution Rate', fontsize=10)
 
-		segment = binary_arr[start_idx:end_idx]
-		if segment.shape[0] == 0:
-			continue
+	# === 绘制背景结构等（如需） ===
+	plot_anatomical_labels(plt, 2)
 
-		# 某通道是否在该时间段有至少一个1
-		active_channels = segment.sum(axis=0) > 0
-		ch_count += active_channels.astype(int)
+	plt.suptitle(f'Topomap: Channel Contribution Rate, {label}, n={len(freq_dict)}', fontsize=14)
+	plt.savefig(os.path.join(output_dir, f"{label}.png"), dpi = 600)
 
-	# 返回为 dict
-	return {f'ch{i}': ch_count[i] for i in range(n_channels)}
 
-def plot_channel_freq_heatmap(freq_dict, label='test-sub1'):
-	import seaborn as sns
-	import matplotlib.pyplot as plt
-	df = pd.DataFrame(freq_dict, index=[label])
-	sns.heatmap(df, annot=True, cmap='YlOrRd')
-	plt.title(f'MTS Participation Frequency for {label}')
-	plt.xlabel('Channel')
-	plt.ylabel('Subject')
-	plt.tight_layout()
-	plt.show()
 
-if __name__ == "__main__":
-	freq_dict = compute_channel_mts_frequency_from_mts('out/test/trends_raw.csv', 'out/test/binery_trends_raw/test-sub1.csv')
-	print(freq_dict)
-	plot_channel_freq_heatmap(freq_dict)
+
+if __name__ == '__main__':
+	peaks_csv_path = 'out/test_min_duation_1.6s/peaks_raw/test-sub1.csv'
+	binary_csv_path = 'out/test_min_duation_1.6s/binery_trends_raw/test-sub1.csv'
+	dict = compute_channel_event_participation(peaks_csv_path, binary_csv_path)
+	plot_ch_count_heatmap(dict, 'test-sub1', 'out/test_min_duation_1.6s/ch_count_heatmap')

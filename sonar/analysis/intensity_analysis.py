@@ -1,4 +1,5 @@
 import os
+import stat
 from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
@@ -139,7 +140,7 @@ class IntensityAnalyzer:
 			plt.close()
 
 
-	def save(self, output_path, label='unknown') -> pd.DataFrame:
+	def save(self, output_path, label) -> pd.DataFrame:
 		"""
 		Save detected peak segments to CSV in the format:
 		TIME, VALUE, DURATION, LABEL, peak_time, peak_value
@@ -168,45 +169,18 @@ class IntensityAnalyzer:
 		print(f"[✓] Saved peak segments to {output_path}")
 
 		return df
+	
 
 	@staticmethod
-	def example():
-		csv_path = 'res/test/intensity_increasing_ALL_1.6s.csv'
+	def extract_peaks(csv_path, peaks_raw_dir, peaks_fig_dir):
+		df = pd.read_csv(csv_path)
 
-		times = []
-		values = []
-		with open(csv_path, newline='', encoding='utf-8-sig') as f:
-			reader = csv.DictReader(f)
-			for row in reader:
-				times.append(float(row['time']))
-				values.append(float(row['value']))
+		os.makedirs(peaks_raw_dir, exist_ok=True)
+		os.makedirs(peaks_fig_dir, exist_ok=True)
 
-		analyzer = IntensityAnalyzer(times, values, smooth_size=30, threshold=30)
-		analyzer.save('out/intensity_peaks.csv')
-
-
-if __name__ == '__main__':
-	csv_path = 'res/test/intensity_peaks_all.csv'
-	output_dir = 'out/test/intensity_peaks/'
-
-	os.makedirs(output_dir, exist_ok=True)
-
-	# Step 1: 使用 pandas 读取并按 label 分组
-	df = pd.read_csv(csv_path, encoding='utf-8-sig')
-
-	# 安全性检查
-	required_columns = {'label', 'time', 'value'}
-	if not required_columns.issubset(df.columns):
-		raise ValueError(f"Missing required columns in CSV: {required_columns - set(df.columns)}")
-
-	# Step 2: 分组并分析每个 label 的数据
-	for label_name, group_df in df.groupby('label'):
-		analyzer = IntensityAnalyzer(
-			times=group_df['time'].tolist(),
-			values=group_df['value'].tolist(),
-			smooth_size=30,
-			threshold=30
-		)
-		save_path = os.path.join(output_dir, f'intensity_peaks_{label_name}.csv')
-		analyzer.save(save_path)
-		print(f"[✓] Saved: {save_path}")
+		for label, group in df.groupby('label'):
+			time = group['time'].tolist()
+			value = group['value'].tolist()
+			analyzer = IntensityAnalyzer(time, value)
+			df = analyzer.save(output_path=os.path.join(peaks_raw_dir, f'{label}.csv'), label=label)
+			analyzer.plot(show=False, save_path=os.path.join(peaks_fig_dir, f'{label}.png'))

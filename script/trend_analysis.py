@@ -2,8 +2,9 @@ import csv
 import os
 from tqdm import tqdm 
 
+from script import mts_analysis
 from sonar.analysis.intensity_analysis import IntensityAnalyzer
-from sonar.analysis.trend_topomap import TrendTopomap
+from sonar.analysis.trend_topomap import TrendTopomap, save_binary_ts_by_subject
 from sonar.core.dataset_loader import get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
@@ -14,7 +15,7 @@ def main():
 
 	region_selector_l = [
 		# RegionSelector(center_sec=2740, length_sec=30),
-		RegionSelector(start_sec=2250, length_sec=850),
+		RegionSelector(start_sec=2250, end_sec=4950),
 	]
 
 
@@ -42,22 +43,53 @@ def main():
 
 			trend_topomap.set_region_selector(region_selector)
 			trend_topomap.plot_trends(output_dir=fig_dir)
+			trend_topomap.save_trends_to_csv(save_path='out/test/trends_raw.csv')
 
-def intensity_peaks():	
-	csv_path = 'out/min_duation_1.6s/intensity_increasing_HC1_1.6s.csv'
+def single(out_dir):
+	dataset, annotations = get_dataset(ds_dir=out_dir, load_cache=False)
+	folder_name = os.path.basename(out_dir)
+	
+	window_selector = WindowSelector(window_size=1, step=0.1)
+	min_duration = 1.6
+	region_selector = RegionSelector(start_sec=2250, end_sec=4950)
 
-	times = []
-	values = []
-	with open(csv_path, newline='', encoding='utf-8-sig') as f:
-		reader = csv.DictReader(f)
-		for row in reader:
-			times.append(float(row['time']))
-			values.append(float(row['value']))
+	out_dir = os.path.join('out', f'{folder_name}_min_duation_{min_duration:.1f}s')
+	os.makedirs(out_dir, exist_ok=True)
 
-	analyzer = IntensityAnalyzer(times, values, smooth_size=30, threshold=30)
-	analyzer.save('out/intensity_peaks.csv')
+	trends_fig_dir = os.path.join(out_dir, f'trends_fig')
+	intensity_raw_dir = os.path.join(out_dir, f'intensity_raw')
+	binery_trends_dir = os.path.join(out_dir, f'binery_trends_raw')
+	trends_raw_csv = os.path.join(out_dir, f'trends_raw.csv')
+	peaks_raw_dir = os.path.join(out_dir, f'peaks_raw')
+	peaks_fig_dir = os.path.join(out_dir, f'peaks_fig')
+	ch_count_heatmap_dir = os.path.join(out_dir, f'ch_count_heatmap')
+
+	trend_topomap = TrendTopomap(dataset, window_selector=window_selector, mode='increasing', min_duration=min_duration, annotations=annotations, region_selector=None, debug=False)
+	trend_topomap.save_intensity_to_csv(output_dir=intensity_raw_dir)
+
+	trend_topomap.set_region_selector(region_selector)
+	trend_topomap.plot_trends(output_dir=trends_fig_dir)
+	trend_topomap.save_trends_to_csv(save_path=trends_raw_csv)
+
+	save_binary_ts_by_subject(trends_raw_csv, output_dir=binery_trends_dir, sample_rate=10)
+
+	# save intensity peaks
+	IntensityAnalyzer.extract_peaks(
+		csv_path=os.path.join(intensity_raw_dir, f'intensity_increasing_ALL_{min_duration}s.csv'),
+		peaks_raw_dir=peaks_raw_dir,
+		peaks_fig_dir=peaks_fig_dir
+	)
+
+	# generate heatmap
+	for sub_label in dataset.label_l:
+		peaks_csv_path = os.path.join(peaks_raw_dir, f'{sub_label}.csv')
+		binary_csv_path = os.path.join(binery_trends_dir, f'{sub_label}.csv')
+		dict = mts_analysis.compute_channel_event_participation(peaks_csv_path, binary_csv_path)
+		mts_analysis.plot_ch_count_heatmap(dict, sub_label, ch_count_heatmap_dir)
+		
+
 
 if __name__ == "__main__":
-	main()
-	# intensity_peaks()
+	# main()
+	single('res/trainingcamp-nirspark')
 	

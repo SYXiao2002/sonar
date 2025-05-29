@@ -30,7 +30,16 @@ def clear_folder(folder_path):
 		except Exception as e:
 			print(f'Failed to delete {file_path}. Reason: {e}')
 
-
+def list_csv_files(folder_path):
+	"""
+	List all CSV files in the given folder.
+	"""
+	file_list = []
+	for filename in os.listdir(folder_path):
+		if filename.endswith('.csv'):
+			full_path = os.path.join(folder_path, filename)
+			file_list.append(full_path)
+	return file_list
 
 def save_head_csv(
 	input_path: str,

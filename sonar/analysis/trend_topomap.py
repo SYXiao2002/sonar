@@ -143,6 +143,7 @@ class TrendTopomap():
 
 		self.intensity_l = intensity_l
 
+
 	def set_region_selector(self, region_selector: RegionSelector):
 		self.region_selector = region_selector
 
@@ -382,7 +383,7 @@ def save_binary_ts_by_subject(csv_path, output_dir, sample_rate):
 				start_idx = int((row['start'] - start_time) * sample_rate)
 				end_idx = int((row['end'] - start_time) * sample_rate)
 				binary_array[start_idx:end_idx + 1] = 1
-			ch_dict[f'ch{ch+1}'] = binary_array
+			ch_dict[f'ch{ch}'] = binary_array
 
 		# 构建 DataFrame
 		df_out = pd.DataFrame({'time': time_axis})
