@@ -10,6 +10,7 @@ from functools import lru_cache
 import hashlib
 import os
 import matplotlib
+from matplotlib.pylab import f
 import pandas as pd
 from tqdm import tqdm
 from typing import Dict, Literal, Optional, Sequence
@@ -71,6 +72,7 @@ class TrendTopomap():
 		self._computed_trends_binery: Dict[int, Sequence[Sequence]] = {}
 		self._computed_intensity: Dict[int, Sequence[Intensity]] = {}
 		self._computed_high_intensity: Dict[int, Sequence[IntensityAnalyzer]] = {}
+		self._heart_rate: Dict[int, (Sequence[float], Sequence[float])] = {}
 
 		# calculate
 		self._calculate()
@@ -89,6 +91,15 @@ class TrendTopomap():
 		self._compute_intensity()
 		self._extract_high_intensity(thr=self.thr)
 		self._compute_channel_status()
+		self._get_heart_rate()
+
+
+	def _get_heart_rate(self, dir='out/no-filter-spectrogram'):
+		for sub_idx, sub_label in enumerate(self.dataset.label_l):
+			heart_rate_csv = os.path.join(dir, f'{sub_label}.csv')
+			df = pd.read_csv(heart_rate_csv)
+
+			self._heart_rate[sub_idx] = (df['time'], df['freq'])
 
 	def _compute_trends(self):
 		"""
@@ -238,7 +249,7 @@ class TrendTopomap():
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr)
+				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=40)
 
 				self._computed_high_intensity[sub_idx] = intensity_analyzer
 
@@ -252,18 +263,24 @@ class TrendTopomap():
 			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
 			Peak.save_sequence_to_csv(intensity_analyser.segments, csv_path)
 
-	def plot_trends(self, sub_idx, out_folder='fig_trends', dpi=300, return_fig=False):
+	def plot_trends(self, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
+		if sub_idx is None:
+			sub_idx_l = range(len(self.dataset.label_l))
+			for sub_idx in sub_idx_l:
+				self.plot_trends(sub_idx=sub_idx, out_folder=out_folder, dpi=dpi, return_fig=False)
+			return
+
 		trends_fig_dir = os.path.join(self.output_dir, out_folder)
 		sub_label = self.dataset.label_l[sub_idx]
 		os.makedirs(trends_fig_dir, exist_ok=True)
 		data = np.array(self.dataset[sub_idx])
 		n_channels, n_times = data.shape
 
-		fig, (ax1, ax2, ax3) = plt.subplots(
-			nrows=3,
+		fig, (ax1, ax2, ax3, ax4) = plt.subplots(
+			nrows=4,
 			ncols=1,
 			figsize=(12, 8),
-			gridspec_kw={'height_ratios': [4, 1, 1]},
+			gridspec_kw={'height_ratios': [4, 1, 1, 1]},
 			sharex=True
 		)
 
@@ -332,7 +349,6 @@ class TrendTopomap():
 
 		# --- ax3: Intensity Plot ---
 		ax3.set_ylabel(f"Intensity\n{self.intenisty_window_selector}")
-		ax3.set_xlabel("Time (s)")
 		ax3.grid(True)
 
 		intensity = self._computed_intensity.get(sub_idx, {})
@@ -368,9 +384,16 @@ class TrendTopomap():
 			ax3.legend()
 
 
+		# --- ax4: Heart Rate ---
+		ax4.set_ylabel("Heart Rate (Hz)")
+		ax4.plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
+		ax4.grid(True)
+		ax4.set_ylim(1, 1.5)
+
 		# --- Shared x limits ---
-		for ax in [ax1, ax2, ax3]:
+		for ax in [ax1, ax2, ax3, ax4]:
 			ax.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
+		ax4.set_xlabel("Time (s)")
 
 		# --- Save ---
 		fig.subplots_adjust(hspace=0.3)
@@ -389,7 +412,6 @@ class TrendTopomap():
 			analyzer: IntensityAnalyzer
 			region_selector_l: Sequence[RegionSelector] = analyzer.segments
 			fig_dir = os.path.join(out_folder, self.dataset.label_l[sub_idx])
-			os.makedirs(fig_dir, exist_ok=True)
 
 			for r in tqdm(region_selector_l, desc=f"Segments for {self.dataset.label_l[sub_idx]}", leave=False):
 				padding_sec = 20
@@ -448,8 +470,8 @@ class TrendTopomap():
 							   min_duration=1.6, annotations=annotations, region_selector=None, debug=False,
 							   high_intensity_thr=30)
 
-		# trend_topomap.plot_trends()
-		trend_topomap.plot_high_intensity()
+		trend_topomap.plot_trends()
+		# trend_topomap.plot_high_intensity()
 
 if __name__ == "__main__":
 	TrendTopomap.example_run(ds_dir='test')

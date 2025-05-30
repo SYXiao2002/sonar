@@ -157,6 +157,6 @@ def peak_permutation_test(csv_path: str, n_perm=1000, seed=42):
 
 # 示例使用
 if __name__ == "__main__":
-	csv_path = 'out/trainingcamp-pure/raw_high_intensity/HC1.csv'
+	csv_path = 'out/wh_test/raw_high_intensity/wh_converted.csv'
 	results_df = peak_permutation_test(csv_path, n_perm=1000, seed=42)
 	print(results_df)
