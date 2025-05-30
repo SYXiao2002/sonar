@@ -61,41 +61,37 @@ class SpectrogramProcessor:
 
 		self.collapse_frequency_band()
 
-
-	def collapse_frequency_band(self, dB_threshold=-20, f_lim=(0.8, 1.8)):
+	def collapse_frequency_band(self, f_range=(0.8, 2.0), dB_threshold=None):
 		"""Collapse masked spectrogram to get mean frequency (average of max and min freq) per time point for each subject,
 		only within frequency range f_lim"""
-		
-		for sub_idx, sub_label in enumerate(self.dataset.label_l):
-			res = self.results_raw[sub_idx]
-			
-			# 找出频率范围的索引掩码
-			f_mask = (res.f >= f_lim[0]) & (res.f <= f_lim[1])
-			
-			# 对频率范围内的谱图做mask
-			Sxx_dB_masked = np.where(res.Sxx_dB > dB_threshold, res.Sxx_dB, np.nan)
-			
-			mean_freqs = []
+		for sub_idx, res in self.results_raw.items():
+			f = res.f
+			t = res.t
+			Sxx_dB = res.Sxx_dB
 
-			for t_idx in range(Sxx_dB_masked.shape[1]):
-				col = Sxx_dB_masked[:, t_idx]
-				
-				# 只关注频率范围内的数据
-				col_focused = col[f_mask]
-				f_focused = res.f[f_mask]
-				
-				valid_idx = ~np.isnan(col_focused)
-				
-				if np.any(valid_idx):
-					f_valid = f_focused[valid_idx]
-					min_freq = np.min(f_valid)
-					max_freq = np.max(f_valid)
-					mean_freqs.append((min_freq + max_freq) / 2)
+			# Restrict frequency range
+			f_mask = (f >= f_range[0]) & (f <= f_range[1])
+			f_focus = f[f_mask]
+			Sxx_focus = Sxx_dB[f_mask, :]
+
+			# Apply dB threshold mask if needed
+			if dB_threshold is not None:
+				Sxx_focus = np.where(Sxx_focus >= dB_threshold, Sxx_focus, np.nan)
+
+			peak_freqs = []
+
+			for t_idx in range(Sxx_focus.shape[1]):
+				col = Sxx_focus[:, t_idx]
+				if np.all(np.isnan(col)):
+					peak_freqs.append(np.nan)
 				else:
-					mean_freqs.append(np.nan)
+					max_idx = np.nanargmax(col)
+					peak_freqs.append(f_focus[max_idx])
 
-			self.results_collapsed[sub_idx] = np.array(mean_freqs)
-			assert len(self.results_collapsed[sub_idx]) == len(res.t)
+			self.results_collapsed[sub_idx] = peak_freqs
+			assert len(t) == len(peak_freqs)
+
+
 	def _save(self):
 		for sub_idx, sub_label in enumerate(self.dataset.label_l):
 			mean_freq = self.results_collapsed[sub_idx]
@@ -124,7 +120,7 @@ class SpectrogramProcessor:
 		plt.show()
 
 if __name__ == '__main__':
-	dataset, _ = get_dataset(ds_dir='res/trainingcamp-no-filter', load_cache=False)
+	dataset, _ = get_dataset(ds_dir='res/trainingcamp-no-filter-test', load_cache=True)
 	processor = SpectrogramProcessor(dataset, fs=11)
 
 	# processor.plot(subject_idx=0, dB_threshold=-20, f_lim=(0.8, 1.8), t_lim=(100, 300))
