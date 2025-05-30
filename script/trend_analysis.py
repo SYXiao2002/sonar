@@ -56,10 +56,11 @@ def run(ds_dir='test', load_cache='False'):
 							  annotations=annotations, region_selector=region_selector, debug=False,
 							  high_intensity_thr=30)
 
-	trend_topomap.plot_trends()
+	# trend_topomap.plot_trends()
+	trend_topomap.plot_high_intensity()
 
 
 if __name__ == "__main__":
-	run(ds_dir='trainingcamp-pure', load_cache=False)
+	run(ds_dir='trainingcamp-pure', load_cache=True)
 	# run(ds_dir='test', load_cache=True)
 	

@@ -4,16 +4,18 @@ Author: Yixiao Shen
 Date: 2025-05-19
 Purpose: Trend Topomap for individual
 """
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import lru_cache
 import hashlib
 import os
+import matplotlib
 import pandas as pd
 from tqdm import tqdm
 from typing import Dict, Literal, Optional, Sequence
 
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib.patches import Rectangle
 
 from sonar.analysis.intensity_analysis import IntensityAnalyzer, Peak
 from sonar.core.analysis_context import SubjectChannel
@@ -24,6 +26,8 @@ from sonar.preprocess.normalization import normalize_to_range
 from sonar.preprocess.sv_marker import Annotation
 from sonar.utils.file_helper import clear_folder
 from sonar.utils.trend_detector import Trend, TrendDetector
+
+matplotlib.use('Agg')
 
 @dataclass
 class Intensity:
@@ -248,149 +252,163 @@ class TrendTopomap():
 			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
 			Peak.save_sequence_to_csv(intensity_analyser.segments, csv_path)
 
-	def plot_trends(self, out_folder= 'fig_trends'):
-		"""
-		Plot trend segments using existing or loaded computed results.
-		"""
+	def plot_trends(self, sub_idx, out_folder='fig_trends', dpi=300, return_fig=False):
 		trends_fig_dir = os.path.join(self.output_dir, out_folder)
+		sub_label = self.dataset.label_l[sub_idx]
 		os.makedirs(trends_fig_dir, exist_ok=True)
-		for sub_idx, sub_label in tqdm(enumerate(self.dataset.label_l), total=len(self.dataset.label_l), desc="plot_trends"):
-			data = np.array(self.dataset[sub_idx])
-			n_channels, n_times = data.shape
+		data = np.array(self.dataset[sub_idx])
+		n_channels, n_times = data.shape
 
-			fig, (ax1, ax2, ax3) = plt.subplots(
-				nrows=3,
-				ncols=1,
-				figsize=(12, 8),
-				gridspec_kw={'height_ratios': [4, 1, 1]},
-				sharex=True
+		fig, (ax1, ax2, ax3) = plt.subplots(
+			nrows=3,
+			ncols=1,
+			figsize=(12, 8),
+			gridspec_kw={'height_ratios': [4, 1, 1]},
+			sharex=True
+		)
+
+		# --- ax1: Trend Segments ---
+		ax1.set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
+		ax1.set_ylabel(f"Channel ({self.mode})")
+		ax1.set_ylim(-0.5, n_channels + 0.5)
+		ax1.set_yticks([i + 0.5 for i in range(0, n_channels, 2)])
+		ax1.set_yticklabels([f'ch {i + 1}' for i in range(0, n_channels, 2)])
+		ax1.invert_yaxis()
+		ax1.grid(True)
+
+		# --- optimized trend drawing ---
+		sub_trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
+		lines_xmin, lines_xmax, lines_y = [], [], []
+		centers_x, centers_y, center_sizes = [], [], []
+
+		for ch_idx, ch_trends in enumerate(sub_trends):
+			for trend in ch_trends:
+				if not (self.region_selector.start_sec <= trend.center_sec <= self.region_selector.end_sec):
+					continue
+				# Accumulate hline data
+				lines_xmin.append(trend.start_sec)
+				lines_xmax.append(trend.end_sec)
+				lines_y.append(ch_idx + 0.5)
+				# Accumulate scatter data
+				centers_x.append(trend.center_sec)
+				centers_y.append(ch_idx + 0.5)
+				center_sizes.append(trend.height)
+
+		# Draw all trend segments together
+		ax1.hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='blue', linewidth=1, zorder=2)
+
+		if centers_x:
+			center_sizes = normalize_to_range(center_sizes, min_val=1, max_val=10)
+			ax1.scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
+
+		# --- ax2: Annotations ---
+		ax2.set_ylabel("Event")
+		ax2.set_yticks([])
+		ax2.set_ylim(0, 1)
+		ax2.grid(True)
+		xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
+		ax2.set_xticks(xticks)
+		ax2.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
+
+		label_colors = {}
+
+		@lru_cache(maxsize=None)
+		def label_to_color(label):
+			h = hashlib.md5(label.encode()).hexdigest()
+			return tuple(int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+
+		event_spans = {}
+		for a in self.annotations:
+			if a.label not in label_colors:
+				label_colors[a.label] = label_to_color(a.label)
+			if a.label not in event_spans:
+				event_spans[a.label] = []
+			event_spans[a.label].append((a.start, a.duration))
+
+		for label, spans in event_spans.items():
+			ax2.broken_barh(spans, (0, 1), facecolors=label_colors[label], alpha=0.5, label=label)
+
+		ax2.legend(loc='upper right', fontsize=8)
+
+		# --- ax3: Intensity Plot ---
+		ax3.set_ylabel(f"Intensity\n{self.intenisty_window_selector}")
+		ax3.set_xlabel("Time (s)")
+		ax3.grid(True)
+
+		intensity = self._computed_intensity.get(sub_idx, {})
+		if intensity:
+			# Avoid list of tuples → np.array conversion
+			x_vals = np.fromiter((i.time for i in intensity), dtype=np.float32)
+			y_vals = np.fromiter((i.ch_count for i in intensity), dtype=np.float32)
+
+			analyzer: IntensityAnalyzer = self._computed_high_intensity.get(sub_idx, {})
+			thr = analyzer.threshold
+
+			ax3.hlines(
+				y=thr,
+				xmin=self.region_selector.start_sec,
+				xmax=self.region_selector.end_sec,
+				label=f'thr={thr}',
+				color='red',
+				linestyle='--',
+				linewidth=1
 			)
 
-			# --- ax1: Trend Segments ---
-			ax1.set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
-			ax1.set_ylabel(f"Channel ({self.mode})")
-			ax1.set_ylim(-0.5, n_channels + 0.5)
-			yticks = [i + 0.5 for i in range(n_channels)]
-			yticklabels = [f'ch {i + 1}' for i in range(n_channels)]
-			ax1.set_yticks([yticks[i] for i in range(0, n_channels, 2)])
-			ax1.set_yticklabels([yticklabels[i] for i in range(0, n_channels, 2)])
-			for label in ax1.get_yticklabels():
-				label.set_fontsize(8)
-			ax1.invert_yaxis()
-			ax1.grid(True)
+			ax3.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
+			ax3.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
 
-			# Draw trend segments
-			sub_trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
+			# Vectorized mask creation
+			if analyzer.segments:
+				segments = np.array([(s.start_sec, s.end_sec) for s in analyzer.segments])
+				mask = np.logical_or.reduce([
+					(analyzer.times >= start) & (analyzer.times <= end) for start, end in segments
+				])
+				ax3.plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
 
-			for ch_idx, ch_trends in enumerate(sub_trends):
-				valid_centers = []
-				marker_sizes = []
+			ax3.legend()
 
-				for trend in ch_trends:
-					trend: Trend
 
-					# Skip if outside selected region
-					if not (self.region_selector.start_sec <= trend.center_sec <= self.region_selector.end_sec):
-						continue
+		# --- Shared x limits ---
+		for ax in [ax1, ax2, ax3]:
+			ax.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
 
-					valid_centers.append(trend.center_sec)
-					marker_sizes.append(trend.height)
+		# --- Save ---
+		fig.subplots_adjust(hspace=0.3)
+		figure_path = f"{sub_label}_trend_topomap_{self.mode}_{self.min_duration}s_{self.region_selector.start_sec:.0f}_{self.region_selector.end_sec:.0f}.png"
+		figure_path = os.path.join(trends_fig_dir, figure_path)
+		if return_fig:
+			return fig, figure_path
+		plt.savefig(figure_path, dpi=dpi)
+		plt.close()
 
-					# Draw horizontal line for the segment
-					ax1.hlines(y=ch_idx + 0.5, xmin=trend.start_sec, xmax=trend.end_sec, colors='blue', linewidth=1, zorder=2)
-
-				# Draw scatter points for segment centers
-				if valid_centers:
-					marker_sizes = normalize_to_range(marker_sizes, min_val=1, max_val=10)
-					ax1.scatter(valid_centers, [ch_idx + 0.5] * len(valid_centers),
-								s=marker_sizes, color='red', zorder=3)
-					
-			# --- ax2: Annotations ---
-			ax2.set_ylabel("Event")
-			ax2.set_yticks([])
-			ax2.set_ylim(0, 1)
-			ax2.grid(True)
-			xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
-			ax2.set_xticks(xticks)
-			ax2.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
-
-			label_colors = {}
-
-			def label_to_color(label):
-				# Create a consistent RGB colour from the hash of the label
-				h = hashlib.md5(label.encode()).hexdigest()
-				r = int(h[0:2], 16) / 255.0
-				g = int(h[2:4], 16) / 255.0
-				b = int(h[4:6], 16) / 255.0
-				return (r, g, b)
-
-			for a in self.annotations:
-				if a.label not in label_colors:
-					label_colors[a.label] = label_to_color(a.label)
-
-				rect = Rectangle(
-					(a.start, 0),
-					width=a.duration,
-					height=1,
-					color=label_colors[a.label],
-					alpha=0.5,
-					label=a.label
-				)
-				ax2.add_patch(rect)
-
-			handles, labels = ax2.get_legend_handles_labels()
-			by_label = dict(zip(labels, handles))
-			ax2.legend(by_label.values(), by_label.keys(), loc='upper right')
-
-			# --- ax3: Hidden Calculation Line Plot ---
-			ax3.set_ylabel(f"Intensity\n{self.intenisty_window_selector}")
-			ax3.set_xlabel("Time (s)")
-			ax3.grid(True)
-
-			intensity = self._computed_intensity.get(sub_idx, {})
-			if intensity:
-				arr = np.array([(i.time, i.ch_count) for i in intensity])
-				x_vals = arr[:, 0]
-				y_vals = arr[:, 1]
-
-				analyzer: IntensityAnalyzer = self._computed_high_intensity.get(sub_idx, {})
-				thr = analyzer.threshold
-				# Plot the curve
-				ax3.hlines(y=thr, xmin=self.region_selector.start_sec, xmax=self.region_selector.end_sec, label =f'thr={thr}', color='red', linestyle='--', linewidth=1)
-				ax3.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
-				ax3.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
-				ax3.legend()
-
-				for analyzer_seg in analyzer.segments:
-					mask = (analyzer.times >= analyzer_seg.start_sec) & (analyzer.times <= analyzer_seg.end_sec)
-					ax3.plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
-
-					
-			# --- Shared X limits ---
-			ax1.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
-			ax2.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
-			ax3.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
-
-			# --- Finalize ---
-			plt.tight_layout()
-			figure_path = f"{sub_label}_trend_topomap_{self.mode}_{self.min_duration}s_{self.region_selector.start_sec:.0f}_{self.region_selector.end_sec:.0f}.png"
-			figure_path = os.path.join(trends_fig_dir, figure_path)
-			plt.savefig(figure_path, dpi=600)
-			plt.close()
-
-	def plot_high_intensity(self):
+	def plot_high_intensity(self, out_folder='fig_trends_with_high_intensity'):
 		region_selector_tmp = self.region_selector
-		
-		for _, analyzer in self._computed_high_intensity.items():
+		save_tasks = []
+
+		for sub_idx, analyzer in tqdm(self._computed_high_intensity.items(), desc="plot_high_intensity"):
 			analyzer: IntensityAnalyzer
 			region_selector_l: Sequence[RegionSelector] = analyzer.segments
+			fig_dir = os.path.join(out_folder, self.dataset.label_l[sub_idx])
+			os.makedirs(fig_dir, exist_ok=True)
 
-			for r in region_selector_l:
-				padding_sec=20
-				self.region_selector = RegionSelector(start_sec=r.start_sec-padding_sec, end_sec=r.end_sec+padding_sec)
-				self.plot_trends(out_folder='fig_trends_with_high_intensity')
+			for r in tqdm(region_selector_l, desc=f"Segments for {self.dataset.label_l[sub_idx]}", leave=False):
+				padding_sec = 20
+				self.region_selector = RegionSelector(
+					start_sec=r.start_sec - padding_sec,
+					end_sec=r.end_sec + padding_sec
+				)
+				fig, figure_path = self.plot_trends(sub_idx=sub_idx, out_folder=fig_dir, return_fig=True)
+				save_tasks.append((fig, figure_path))
 
 		self.region_selector = region_selector_tmp
+
+		with ThreadPoolExecutor(max_workers=8) as executor:
+			for fig, figure_path in save_tasks:
+				executor.submit(self._save_fig, fig, figure_path)
+
+	def _save_fig(self, fig, figure_path):
+		fig.savefig(figure_path, dpi=300)
+		plt.close(fig)
 
 	def set_region_selector(self, region_selector: RegionSelector):
 		self.region_selector = region_selector
@@ -431,7 +449,7 @@ class TrendTopomap():
 							   high_intensity_thr=30)
 
 		# trend_topomap.plot_trends()
-		# trend_topomap.plot_high_intensity()
+		trend_topomap.plot_high_intensity()
 
 if __name__ == "__main__":
 	TrendTopomap.example_run(ds_dir='test')
