@@ -4,47 +4,22 @@ Author: Yixiao Shen
 Date: 2025-05-28
 Purpose: Multi-channel Trend Synchrony
 """
-
-
 import os
-from matplotlib import cm, colors, pyplot as plt
-import numpy as np
+from collections import Counter
+from typing import Optional, Sequence
+
 import pandas as pd
 
+import numpy as np
+from matplotlib import cm, colors, pyplot as plt
+from pyparsing import annotations
+from statsmodels.stats.multitest import multipletests
+from tqdm import tqdm
+
+from sonar.analysis.intensity_analysis import Peak
+from sonar.core.region_selector import RegionSelector
+from sonar.preprocess.sv_marker import Annotation, read_annotations
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
-
-
-def compute_channel_event_participation(peak_csv_path, bin_csv_path):
-	# 读取峰值（MTS事件）数据
-	df_peaks = pd.read_csv(peak_csv_path)
-	events = [(start, start + dur) for start, dur in zip(df_peaks['TIME'], df_peaks['DURATION'])]
-
-	total_events = len(events)
-	if total_events == 0:
-		raise ValueError("No MTS events found.")
-
-	# 读取二值趋势矩阵
-	df_bin = pd.read_csv(bin_csv_path)
-	time_arr = df_bin['time'].values
-	ch_cols = [col for col in df_bin.columns if col.startswith('ch')]
-
-	# 初始化通道参与事件的次数
-	ch_freq = {ch: 0 for ch in ch_cols}
-
-	for start, end in events:
-		# 获取该事件窗口的所有行
-		mask = (time_arr >= start) & (time_arr <= end)
-		event_data = df_bin.loc[mask, ch_cols]
-
-		# 检查每个通道是否至少出现过1次“1”
-		for ch in ch_cols:
-			if event_data[ch].any():
-				ch_freq[ch] += 1
-
-	# 转为百分比
-	ch_percent = {ch: freq / total_events * 100 for ch, freq in ch_freq.items()}
-
-	return ch_percent
 
 def plot_ch_count_heatmap(freq_dict, label, output_dir):
 	fig = plt.figure(figsize=(12, 8))
@@ -93,10 +68,95 @@ def plot_ch_count_heatmap(freq_dict, label, output_dir):
 	plt.savefig(os.path.join(output_dir, f"{label}.png"), dpi = 600)
 
 
+import numpy as np
+import pandas as pd
+from typing import Sequence
+from collections import Counter
+from statsmodels.stats.multitest import multipletests
+from tqdm import tqdm
 
+# 假设 Peak 类已定义并可正常导入
+# from yourmodule import Peak
 
-if __name__ == '__main__':
-	peaks_csv_path = 'out/test_min_duation_1.6s/peaks_raw/test-sub1.csv'
-	binary_csv_path = 'out/test_min_duation_1.6s/binery_trends_raw/test-sub1.csv'
-	dict = compute_channel_event_participation(peaks_csv_path, binary_csv_path)
-	plot_ch_count_heatmap(dict, 'test-sub1', 'out/test_min_duation_1.6s/ch_count_heatmap')
+def count_real_channel_participation(peaks: Sequence[Peak]):
+	"""Count real participation frequency for each channel"""
+	num_channels = len(peaks[0].channel_status)
+	ch_freq = Counter({f'ch{i+1}': 0 for i in range(num_channels)})
+
+	for peak in peaks:
+		for i, active in enumerate(peak.channel_status):
+			if active:
+				ch_freq[f'ch{i+1}'] += 1
+
+	total_events = len(peaks)
+	ch_percent = {ch: count / total_events * 100 for ch, count in ch_freq.items()}
+
+	return ch_freq, ch_percent
+
+def build_permutation_distribution(peaks: Sequence[Peak], n_perm=1000, seed=42):
+	"""Build permutation-based null distribution"""
+	np.random.seed(seed)
+	num_channels = len(peaks[0].channel_status)
+	all_channels = [f'ch{i+1}' for i in range(num_channels)]
+	ch_perm_freq_list = []
+
+	for _ in tqdm(range(n_perm), desc="Running permutations"):
+		ch_freq = Counter({ch: 0 for ch in all_channels})
+
+		for peak in peaks:
+			k = sum(peak.channel_status)
+			perm_channels = np.random.choice(all_channels, size=k, replace=False)
+			for ch in perm_channels:
+				ch_freq[ch] += 1
+
+		ch_perm_freq_list.append(dict(ch_freq))
+
+	return ch_perm_freq_list
+
+def compute_p_values(real_freq: dict, perm_distributions: Sequence[dict]):
+	"""Compute one-sided (right-tailed) p-values"""
+	n_perm = len(perm_distributions)
+	p_values = {}
+
+	for ch in real_freq.keys():
+		real = real_freq[ch]
+		perm_values = [dist[ch] for dist in perm_distributions]
+		p = (sum(perm >= real for perm in perm_values) + 1) / (n_perm + 1)
+		p_values[ch] = p
+
+	return p_values
+
+def apply_fdr_correction(p_values: dict, alpha=0.05):
+	"""FDR correction (Benjamini-Hochberg)"""
+	ch_names = list(p_values.keys())
+	pvals = [p_values[ch] for ch in ch_names]
+	reject, pvals_corrected, _, _ = multipletests(pvals, alpha=alpha, method='fdr_bh')
+
+	return dict(zip(ch_names, pvals_corrected)), dict(zip(ch_names, reject))
+
+def peak_permutation_test(csv_path: str, n_perm=1000, seed=42):
+	"""整体测试流程"""
+	peaks = Peak.load_sequence_from_csv(csv_path)
+	real_freq, real_percent = count_real_channel_participation(peaks)
+	perm_distributions = build_permutation_distribution(peaks, n_perm=n_perm, seed=seed)
+	p_values = compute_p_values(real_freq, perm_distributions)
+	pvals_corrected, reject = apply_fdr_correction(p_values)
+
+	results = []
+	for ch in real_freq.keys():
+		results.append({
+			'channel': ch,
+			'real_count': real_freq[ch],
+			'real_percent': real_percent[ch],
+			'p_value': p_values[ch],
+			'p_value_corrected': pvals_corrected[ch],
+			'significant': reject[ch]
+		})
+
+	return pd.DataFrame(results)
+
+# 示例使用
+if __name__ == "__main__":
+	csv_path = 'out/trainingcamp-pure/raw_high_intensity/HC1.csv'
+	results_df = peak_permutation_test(csv_path, n_perm=1000, seed=42)
+	print(results_df)

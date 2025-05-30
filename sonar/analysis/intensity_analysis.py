@@ -5,42 +5,77 @@ import pandas as pd
 import scipy
 from scipy.ndimage import uniform_filter1d
 import matplotlib.pyplot as plt
-import csv
 
 from sonar.core.region_selector import RegionSelector
 
 class Peak(RegionSelector):
 	def __init__(self,
-		peak_time, peak_value,
+		highest_time, highest_value,
 		center_sec: Optional[float] = None,
 		length_sec: Optional[float] = None,
 		start_sec: Optional[float] = None,
 		end_sec: Optional[float] = None ,
 		):
 		super().__init__(center_sec=center_sec, length_sec=length_sec, start_sec=start_sec, end_sec=end_sec)
+		self.highest_time = highest_time
+		self.highest_value = highest_value
+		self.channel_status: Sequence[bool] = []
 
-		self.peak_time = peak_time
-		self.peak_value = peak_value
+	def set_channel_status(self, ch_status: Sequence[bool]):
+		self.channel_status = ch_status
 
-	@staticmethod
-	def read_peaks_from_csv(csv_path: str):
-		"""
-		Read peaks from a CSV file with columns:
-		TIME, VALUE, DURATION, LABEL, peak_time, peak_value
-		Returns a list of Peak objects.
-		"""
+
+	def __repr__(self):
+		active_channels = [i for i, active in enumerate(self.channel_status) if active]
+		return (f"<Peak start={self.start_sec:.2f}s, end={self.end_sec:.2f}s, "
+				f"peak={self.highest_time:.2f}s @ {self.highest_value}, "
+				f"active_ch={active_channels}>")
+
+	@classmethod
+	def save_sequence_to_csv(cls, peaks: Sequence["Peak"], path: str):
+		if not peaks:
+			raise ValueError("Empty peak list.")
+
+		num_channels = len(peaks[0].channel_status)
+		channel_names = [f"ch{i+1}" for i in range(num_channels)]
+
+		data = []
+		for seg in peaks:
+			row = {
+				'start_sec': seg.start_sec,
+				'end_sec': seg.end_sec,
+				'length_sec': seg.length_sec,
+				'center_sec': seg.center_sec,
+				'highest_time': seg.highest_time,
+				'highest_value': seg.highest_value
+			}
+			row.update({ch: int(status) for ch, status in zip(channel_names, seg.channel_status)})
+			data.append(row)
+
+		df = pd.DataFrame(data)
+		df.to_csv(path, index=False)
+
+	@classmethod
+	def load_sequence_from_csv(cls, path: str) -> Sequence["Peak"]:
+		df = pd.read_csv(path)
+		channel_cols = [col for col in df.columns if col.startswith("ch")]
+
 		peaks = []
-		with open(csv_path, 'r', encoding='utf-8-sig') as f:
-			reader = csv.DictReader(f)
-			for row in reader:
-				peak = Peak(
-					start_sec=float(row['TIME']),
-					end_sec=float(row['TIME']) + float(row['DURATION']),
-					peak_time=float(row['peak_time']),
-					peak_value=float(row['peak_value'])
-				)
-				peaks.append(peak)
+		for _, row in df.iterrows():
+			peak = cls(
+				highest_time=row['highest_time'],
+				highest_value=row['highest_value'],
+				center_sec=row['center_sec'],
+				length_sec=row['length_sec'],
+				start_sec=row['start_sec'],
+				end_sec=row['end_sec']
+			)
+			ch_status = [bool(row[ch]) for ch in channel_cols]
+			peak.set_channel_status(ch_status)
+			peaks.append(peak)
+
 		return peaks
+
 
 class IntensityAnalyzer:
 	def __init__(self, times: Sequence[float], values: Sequence[float], smooth_size=50, threshold=30):
@@ -88,15 +123,14 @@ class IntensityAnalyzer:
 			peak_value = values[peak_idx]
 
 			peak = Peak(
-				peak_time=peak_time,
-				peak_value=peak_value,
+				highest_time=peak_time,
+				highest_value=peak_value,
 				start_sec=times[start_idx],
 				end_sec=times[end_idx]
 			)
 			segments.append(peak)
 
 		return segments
-
 	
 	def _compute(self):
 		"""
@@ -138,38 +172,6 @@ class IntensityAnalyzer:
 		else:
 			plt.close()
 
-
-	def save(self, output_path, label) -> pd.DataFrame:
-		"""
-		Save detected peak segments to CSV in the format:
-		TIME, VALUE, DURATION, LABEL, peak_time, peak_value
-
-		:param output_path: Path to output CSV file.
-		:param label: Label name to associate with all segments.
-		:return: DataFrame of saved segments.
-		"""
-		if not self.segments:
-			raise RuntimeError("No segments to save. Run analyze() first.")
-
-		# 构造 DataFrame
-		data = [{
-			'TIME': seg.start_sec,
-			'VALUE': 1,
-			'DURATION': seg.length_sec,
-			'LABEL': label,
-			'peak_time': seg.peak_time,
-			'peak_value': int(seg.peak_value)
-		} for seg in self.segments]
-
-		df = pd.DataFrame(data)
-
-		# 保存 CSV
-		df.to_csv(output_path, index=False, encoding='utf-8-sig')
-		print(f"[✓] Saved peak segments to {output_path}")
-
-		return df
-	
-
 	@staticmethod
 	def extract_peaks(csv_path, peaks_raw_dir, peaks_fig_dir):
 		df = pd.read_csv(csv_path)
@@ -180,6 +182,6 @@ class IntensityAnalyzer:
 		for label, group in df.groupby('label'):
 			time = group['time'].tolist()
 			value = group['value'].tolist()
-			analyzer = IntensityAnalyzer(time, value)
+			analyzer = IntensityAnalyzer(time, value, smooth_size=50, threshold=30)
 			df = analyzer.save(output_path=os.path.join(peaks_raw_dir, f'{label}.csv'), label=label)
 			analyzer.plot(show=False, save_path=os.path.join(peaks_fig_dir, f'{label}.png'))

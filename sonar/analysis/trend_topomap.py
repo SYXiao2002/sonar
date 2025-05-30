@@ -15,13 +15,14 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 
-from sonar.analysis.intensity_analysis import IntensityAnalyzer
+from sonar.analysis.intensity_analysis import IntensityAnalyzer, Peak
 from sonar.core.analysis_context import SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
 from sonar.preprocess.normalization import normalize_to_range
 from sonar.preprocess.sv_marker import Annotation
+from sonar.utils.file_helper import clear_folder
 from sonar.utils.trend_detector import Trend, TrendDetector
 
 @dataclass
@@ -35,20 +36,22 @@ class TrendTopomap():
 		self,
 		output_dir: Optional[str],
 		dataset: DatasetLoader,
-		window_selector: WindowSelector,
+		intensity_window_selector: WindowSelector,
 		mode: Literal['increasing', 'decreasing'] = 'increasing',
 		min_duration: float = 5.0,
 		region_selector: Optional['RegionSelector'] = None,
 		annotations: Optional[Sequence[Annotation]] = None,
 		debug: bool = False,
+		high_intensity_thr: int = 30
 	):
 		self.dataset = dataset
 		self.mode = mode
 		self.min_duration = min_duration
 		self.annotations = annotations if annotations is not None else []
 		self.debug = debug
-		self.window_selector = window_selector
+		self.intenisty_window_selector = intensity_window_selector
 		self.output_dir = output_dir
+		self.thr = high_intensity_thr
 
 		os.makedirs(self.output_dir, exist_ok=True)
 
@@ -80,7 +83,8 @@ class TrendTopomap():
 		self._compute_trends()
 		self._convert_trends_to_binary()
 		self._compute_intensity()
-		self._extract_high_intensity(thr=30)
+		self._extract_high_intensity(thr=self.thr)
+		self._compute_channel_status()
 
 	def _compute_trends(self):
 		"""
@@ -175,12 +179,12 @@ class TrendTopomap():
 
 	def _compute_intensity(self, window_selector: Optional[WindowSelector] = None):
 		if window_selector is not None:
-			self.window_selector = window_selector
+			self.intenisty_window_selector = window_selector
 
 		time_array = self.dataset['time']
 		dt = time_array[1] - time_array[0]  # sampling interval
-		window_size = self.window_selector.window_size
-		step_size = self.window_selector.step
+		window_size = self.intenisty_window_selector.window_size
+		step_size = self.intenisty_window_selector.step
 
 		n_samples = len(time_array)
 		win_len = int(window_size / dt)
@@ -242,16 +246,14 @@ class TrendTopomap():
 			intensity_analyser: IntensityAnalyzer
 			label = self.dataset.label_l[sub_idx]
 			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
-			intensity_analyser.save(csv_path, label=label)
+			Peak.save_sequence_to_csv(intensity_analyser.segments, csv_path)
 
-	
-	def plot_trends(self):
+	def plot_trends(self, out_folder= 'fig_trends'):
 		"""
 		Plot trend segments using existing or loaded computed results.
 		"""
-		trends_fig_dir = os.path.join(self.output_dir, 'fig_trends')
+		trends_fig_dir = os.path.join(self.output_dir, out_folder)
 		os.makedirs(trends_fig_dir, exist_ok=True)
-		# for sub_idx, sub_label in enumerate(self.dataset.label_l):
 		for sub_idx, sub_label in tqdm(enumerate(self.dataset.label_l), total=len(self.dataset.label_l), desc="plot_trends"):
 			data = np.array(self.dataset[sub_idx])
 			n_channels, n_times = data.shape
@@ -341,7 +343,7 @@ class TrendTopomap():
 			ax2.legend(by_label.values(), by_label.keys(), loc='upper right')
 
 			# --- ax3: Hidden Calculation Line Plot ---
-			ax3.set_ylabel(f"Intensity\n{self.window_selector}")
+			ax3.set_ylabel(f"Intensity\n{self.intenisty_window_selector}")
 			ax3.set_xlabel("Time (s)")
 			ax3.grid(True)
 
@@ -376,18 +378,60 @@ class TrendTopomap():
 			plt.savefig(figure_path, dpi=600)
 			plt.close()
 
+	def plot_high_intensity(self):
+		region_selector_tmp = self.region_selector
+		
+		for _, analyzer in self._computed_high_intensity.items():
+			analyzer: IntensityAnalyzer
+			region_selector_l: Sequence[RegionSelector] = analyzer.segments
+
+			for r in region_selector_l:
+				padding_sec=20
+				self.region_selector = RegionSelector(start_sec=r.start_sec-padding_sec, end_sec=r.end_sec+padding_sec)
+				self.plot_trends(out_folder='fig_trends_with_high_intensity')
+
+		self.region_selector = region_selector_tmp
+
 	def set_region_selector(self, region_selector: RegionSelector):
 		self.region_selector = region_selector
 
+	def _compute_channel_status(self):
+		for sub_idx, analyzer in self._computed_high_intensity.items():
+			analyzer: IntensityAnalyzer
+			sub_trends: Sequence[Sequence[int]] = self._computed_trends_binery[sub_idx]  # shape: [n_channels][n_timepoints]
+			peak_regions: Sequence[Peak] = analyzer.segments
+			time_arr = analyzer.times  # shape: [n_timepoints]
+
+			for peak in peak_regions:
+				start = peak.start_sec
+				end = peak.end_sec
+
+				# 获取事件对应的时间范围 mask
+				mask = (time_arr >= start) & (time_arr <= end)
+
+				# 对每个通道检查是否有激活点
+				channel_status = []
+				for ch_trend in sub_trends:
+					# ch_trend[mask] 是该通道在事件时间范围内的二值序列
+					active = any(val for val, m in zip(ch_trend, mask) if m)
+					channel_status.append(active)
+
+				peak.channel_status = channel_status
+
 	@staticmethod
-	def example(ds_dir='test'):
-		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True)
+	def example_run(ds_dir='test'):
+		clear_folder(os.path.join('out', ds_dir))
+		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=False)
 
 		window_selector = WindowSelector(window_size=1, step=0.1)
 
-		trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), dataset=dataset, window_selector=window_selector, mode='increasing', min_duration=1.6, annotations=annotations, region_selector=None, debug=False)
+		trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
+							   dataset=dataset, intensity_window_selector=window_selector, mode='increasing', 
+							   min_duration=1.6, annotations=annotations, region_selector=None, debug=False,
+							   high_intensity_thr=30)
 
-		trend_topomap.plot_trends()
+		# trend_topomap.plot_trends()
+		# trend_topomap.plot_high_intensity()
 
 if __name__ == "__main__":
-	TrendTopomap.example(ds_dir='trainingcamp-nirspark')
+	TrendTopomap.example_run(ds_dir='test')

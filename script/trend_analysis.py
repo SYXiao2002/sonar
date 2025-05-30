@@ -1,10 +1,7 @@
-import csv
 import os
 from tqdm import tqdm 
 
-from script import mts_analysis
-from sonar.analysis.intensity_analysis import IntensityAnalyzer
-from sonar.analysis.trend_topomap import TrendTopomap, save_binary_ts_by_subject
+from sonar.analysis.trend_topomap import TrendTopomap
 from sonar.core.dataset_loader import get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
@@ -35,7 +32,7 @@ def main():
 	for min_duration in tqdm(min_duration_l, desc="Computing trend maps"):
 		csv_dir = f'out/nirspark_min_duation_{min_duration:.1f}s'
 
-		trend_topomap = TrendTopomap(dataset, window_selector=window_selector, mode='increasing', min_duration=min_duration, annotations=annotations, region_selector=None, debug=False)
+		trend_topomap = TrendTopomap(dataset, intensity_window_selector=window_selector, mode='increasing', min_duration=min_duration, annotations=annotations, region_selector=None, debug=False)
 		trend_topomap._save_intensity_to_csv(output_dir=csv_dir)
 
 		for region_selector in tqdm(region_selector_l, desc="Plotting trend maps"):
@@ -45,17 +42,24 @@ def main():
 			trend_topomap.plot_trends(output_dir=fig_dir)
 			trend_topomap._save_trends_to_csv(save_path='out/test/trends_raw.csv')
 
-def run(ds_dir='test'):
-	dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True)
+def run(ds_dir='test', load_cache='False'):
+	dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=load_cache)
 
-	window_selector = WindowSelector(window_size=1, step=0.1)
+	intensity_window_selector = WindowSelector(window_size=1, step=0.1)
 
-	trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), dataset=dataset, window_selector=window_selector, mode='increasing', min_duration=1.6, annotations=annotations, region_selector=None, debug=False)
+	# region_selector = RegionSelector(start_sec=2230, end_sec=570)
+	region_selector = None
+
+	trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
+							  dataset=dataset, intensity_window_selector=intensity_window_selector, 
+							  mode='increasing', min_duration=1, 
+							  annotations=annotations, region_selector=region_selector, debug=False,
+							  high_intensity_thr=30)
 
 	trend_topomap.plot_trends()
 
 
 if __name__ == "__main__":
-	# main()
-	pass
+	run(ds_dir='trainingcamp-pure', load_cache=False)
+	# run(ds_dir='test', load_cache=True)
 	
