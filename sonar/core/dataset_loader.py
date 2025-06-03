@@ -10,9 +10,13 @@ import hashlib
 import os
 import time
 from matplotlib import pyplot as plt
+from matplotlib.artist import get
 import numpy as np
 from typing import List, NamedTuple, Sequence, Union
 from collections.abc import Sequence as ABCSequence
+
+import pandas as pd
+from pyparsing import annotations
 
 from sonar.preprocess.sv_marker import read_annotations
 
@@ -172,8 +176,7 @@ class DatasetLoader:
 		"""
 		cache_path = get_cache_path(dataset_info_list)
 
-		if load_cache:
-			os.path.exists(cache_path)
+		if load_cache and os.path.exists(cache_path):
 			print(f"Loading cached dataset from {cache_path}")
 			return DatasetLoader.from_cache(cache_path)
 	
@@ -232,6 +235,8 @@ def get_dataset(ds_dir, load_cache):
 		os.path.join(hbo_dir, f) for f in os.listdir(hbo_dir) if f.endswith('.csv')
 	]
 
+	print(f'hbo_file_l: {hbo_file_l}')
+
 	dataset_template =[
 		DatasetInfo(f, os.path.basename(f).split('.')[0]) for f in hbo_file_l
 	]
@@ -242,3 +247,21 @@ def get_dataset(ds_dir, load_cache):
 	print(f"[INFO] Dataset loaded in {end_time - start_time:.3f} seconds")
 	annotations = read_annotations(marker_file)
 	return dataset, annotations
+
+
+
+def extract_hbo(dataset: DatasetLoader, output_dir: str):
+	output_dir = os.path.join(output_dir, 'raw-sv-marker-hbo')
+	for sub_idx, sub_label in enumerate(dataset.label_l):
+		subject_data = dataset[sub_idx]
+		sub_dir = os.path.join(output_dir, sub_label)
+		os.makedirs(sub_dir, exist_ok=True)
+		time = dataset['time']
+		for ch_idx, ch_data in enumerate(subject_data):
+			path = os.path.join(sub_dir, f'{ch_idx+1}.csv')
+			df = pd.DataFrame({'TIME': time, 'VALUE': ch_data, 'LABEL': f'{sub_label}-ch{ch_idx+1:02d}'})
+			df.to_csv(path, index=False)
+
+
+if __name__ == '__main__':
+	ds, _ = get_dataset(ds_dir=os.path.join('res', 'trainingcamp-nirspark'), load_cache=False)

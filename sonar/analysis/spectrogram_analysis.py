@@ -6,6 +6,8 @@ import pandas as pd
 from scipy.signal import spectrogram
 from dataclasses import dataclass
 
+from tqdm import tqdm
+
 from sonar.core.dataset_loader import get_dataset
 
 @dataclass
@@ -34,12 +36,12 @@ class SpectrogramProcessor:
 		self._save()
 
 	def _compute(self):
-		for sub_idx, sub_label in enumerate(self.dataset.label_l):
+		for sub_idx, sub_label in tqdm(enumerate(self.dataset.label_l), total=len(self.dataset.label_l)):
 			"""Compute and store spectrogram for a specific subject"""
 			subject_data = self.dataset[sub_idx]
 			Sxx_total = None
 
-			for ch in range(self.n_channels):
+			for ch in tqdm(range(self.n_channels), desc=f"Computing spectrogram for {sub_label}", leave=False):
 				signal = np.array(subject_data[ch])
 				f, t, Sxx = spectrogram(
 					signal,
@@ -95,7 +97,7 @@ class SpectrogramProcessor:
 	def _save(self):
 		for sub_idx, sub_label in enumerate(self.dataset.label_l):
 			mean_freq = self.results_collapsed[sub_idx]
-			sub_dir = os.path.join('out', 'no-filter-spectrogram')
+			sub_dir = os.path.join('res', 'no-filter-spectrogram/trainingCamp-mne')
 			os.makedirs(sub_dir, exist_ok=True)
 			df = pd.DataFrame({'time': self.results_raw[sub_idx].t + self.dataset['time'][0], 'freq': mean_freq})
 			df.to_csv(os.path.join(sub_dir, f'{sub_label}.csv'), index=False)
@@ -120,7 +122,7 @@ class SpectrogramProcessor:
 		plt.show()
 
 if __name__ == '__main__':
-	dataset, _ = get_dataset(ds_dir='res/trainingcamp-no-filter-test', load_cache=True)
+	dataset, _ = get_dataset(ds_dir='res/trainingcamp-no-filter', load_cache=True)
 	processor = SpectrogramProcessor(dataset, fs=11)
 
 	# processor.plot(subject_idx=0, dB_threshold=-20, f_lim=(0.8, 1.8), t_lim=(100, 300))

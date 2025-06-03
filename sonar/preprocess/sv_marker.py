@@ -1,4 +1,4 @@
-from typing import List, NamedTuple
+from typing import NamedTuple, Sequence
 import csv
 
 class Annotation(NamedTuple):
@@ -7,7 +7,7 @@ class Annotation(NamedTuple):
 	duration: float
 	label: str
 
-def read_annotations(path: str) -> List[Annotation]:
+def read_annotations(path: str) -> Sequence[Annotation]:
 	annotations = []
 	with open(path, 'r') as f:
 		reader = csv.DictReader(f)

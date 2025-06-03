@@ -54,14 +54,15 @@ def run(ds_dir='test', load_cache='False'):
 							  dataset=dataset, intensity_window_selector=intensity_window_selector, 
 							  mode='increasing', min_duration=1, 
 							  annotations=annotations, region_selector=region_selector, debug=False,
-							  high_intensity_thr=30)
+							  high_intensity_thr=30,
+							  heartrate_dir='res/heartrate/trainingCamp-mne')
 
 	trend_topomap.plot_trends()
 	trend_topomap.plot_high_intensity()
 
 
 if __name__ == "__main__":
-	run(ds_dir='wh_test', load_cache=False)
-	# run(ds_dir='trainingcamp-pure', load_cache=True)
+	# run(ds_dir='wh_test', load_cache=False)
+	run(ds_dir='trainingcamp-pure', load_cache=False)
 	# run(ds_dir='test', load_cache=True)
 	

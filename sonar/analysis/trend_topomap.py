@@ -47,7 +47,8 @@ class TrendTopomap():
 		region_selector: Optional['RegionSelector'] = None,
 		annotations: Optional[Sequence[Annotation]] = None,
 		debug: bool = False,
-		high_intensity_thr: int = 30
+		high_intensity_thr: int = 30,
+		heartrate_dir: Optional[str] = 'res/heartrate/test'
 	):
 		self.dataset = dataset
 		self.mode = mode
@@ -57,6 +58,7 @@ class TrendTopomap():
 		self.intenisty_window_selector = intensity_window_selector
 		self.output_dir = output_dir
 		self.thr = high_intensity_thr
+		self.heartrate_dir = heartrate_dir
 
 		os.makedirs(self.output_dir, exist_ok=True)
 
@@ -94,9 +96,9 @@ class TrendTopomap():
 		self._get_heart_rate()
 
 
-	def _get_heart_rate(self, dir='out/no-filter-spectrogram'):
+	def _get_heart_rate(self):
 		for sub_idx, sub_label in enumerate(self.dataset.label_l):
-			heart_rate_csv = os.path.join(dir, f'{sub_label}.csv')
+			heart_rate_csv = os.path.join(self.heartrate_dir, f'{sub_label}.csv')
 			df = pd.read_csv(heart_rate_csv)
 
 			self._heart_rate[sub_idx] = (df['time'], df['freq'])

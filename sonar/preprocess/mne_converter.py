@@ -137,6 +137,7 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 		print("Saving data to CSV...")
 		df = pd.DataFrame(hbo.get_data().T, columns=hbo.ch_names)
 
+		# apply z-score normalization
 		for col in df.columns:
 			mean = df[col].mean()
 			std = df[col].std()
