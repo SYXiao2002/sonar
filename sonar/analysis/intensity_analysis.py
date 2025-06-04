@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from sonar.core.region_selector import RegionSelector
 
-class Peak(RegionSelector):
+class HighIntensity(RegionSelector):
 	def __init__(self,
 		highest_time, highest_value,
 		center_sec: Optional[float] = None,
@@ -32,7 +32,7 @@ class Peak(RegionSelector):
 				f"active_ch={active_channels}>")
 
 	@classmethod
-	def save_sequence_to_csv(cls, peaks: Sequence["Peak"], path: str):
+	def save_sequence_to_csv(cls, peaks: Sequence["HighIntensity"], path: str):
 		if not peaks:
 			raise ValueError("Empty peak list.")
 
@@ -56,7 +56,7 @@ class Peak(RegionSelector):
 		df.to_csv(path, index=False)
 
 	@classmethod
-	def load_sequence_from_csv(cls, path: str) -> Sequence["Peak"]:
+	def load_sequence_from_csv(cls, path: str) -> Sequence["HighIntensity"]:
 		df = pd.read_csv(path)
 		channel_cols = [col for col in df.columns if col.startswith("ch")]
 
@@ -91,8 +91,8 @@ class IntensityAnalyzer:
 		self.values = np.array(values)
 		self.smooth_size = smooth_size
 		self.threshold = threshold
-		self.max_value = max_value
-		self.segments: Sequence[Peak] = []
+		# self.max_value = max_value
+		self.segments: Sequence[HighIntensity] = []
 		self.smoothed: Sequence[float] = None
 
 		self._compute()
@@ -106,7 +106,7 @@ class IntensityAnalyzer:
 		mask = values > self.threshold
 		labeled_array, num_features = scipy.ndimage.measurements.label(mask)
 
-		segments: Sequence[Peak] = []
+		segments: Sequence[HighIntensity] = []
 		for i in range(1, num_features + 1):
 			indices = np.where(labeled_array == i)[0]
 			if len(indices) == 0:
@@ -123,14 +123,14 @@ class IntensityAnalyzer:
 			peak_time = times[peak_idx]
 			peak_value = values[peak_idx]
 
-			peak = Peak(
+			peak = HighIntensity(
 				highest_time=peak_time,
 				highest_value=peak_value,
 				start_sec=times[start_idx],
 				end_sec=times[end_idx]
 			)
-			if peak_value < self.max_value:
-				continue
+			# if peak_value < self.max_value:
+			# 	continue
 			segments.append(peak)
 
 		return segments

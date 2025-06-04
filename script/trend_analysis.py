@@ -2,6 +2,7 @@ import os
 from tqdm import tqdm 
 
 from sonar.analysis.trend_topomap import TrendTopomap
+from sonar.analysis.waveform_topomap import WaveformTopomap
 from sonar.core.dataset_loader import get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
@@ -14,7 +15,6 @@ def main():
 		# RegionSelector(center_sec=2740, length_sec=30),
 		RegionSelector(start_sec=2250, end_sec=4950),
 	]
-
 
 	min_duration_l = [
 		# 0.1, 
@@ -43,22 +43,30 @@ def main():
 			trend_topomap._save_trends_to_csv(save_path='out/test/trends_raw.csv')
 
 def run(ds_dir='test', load_cache='False'):
-	dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=load_cache)
+	ds, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=load_cache)
 
 	intensity_window_selector = WindowSelector(window_size=1, step=0.1)
 
-	# region_selector = RegionSelector(start_sec=2230, length_sec=300)
-	region_selector = RegionSelector(center_sec=2755, length_sec=100)
-	# region_selector = None
+	region_selector_l = [
+		None,
+		RegionSelector(start_sec=2230, length_sec=600),
+	]
+
+	# waveform_topomap = WaveformTopomap(ds, region_selector, 'res/test/snirf_metadata.csv', os.path.join('out', ds_dir, 'fig_waveform_topomap'))
+	# waveform_topomap.plot(['HC1', 'HC3', 'HC5'])
+	# return
 
 	trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
-							  dataset=dataset, intensity_window_selector=intensity_window_selector, 
+							  dataset=ds, intensity_window_selector=intensity_window_selector, 
 							  mode='increasing', min_duration=1, 
-							  annotations=annotations, region_selector=region_selector, debug=False,
+							  annotations=annotations, region_selector=None, debug=False,
 							  high_intensity_thr=30,
 							  heartrate_dir='res/heartrate/trainingCamp-mne')
 
-	trend_topomap.plot_trends()
+	for r in region_selector_l:
+		trend_topomap.set_region_selector(r)
+		trend_topomap.plot_trends()
+
 	# trend_topomap.plot_high_intensity()
 
 
@@ -69,4 +77,3 @@ if __name__ == "__main__":
 	run(ds_dir='trainingcamp-pure', load_cache=True)
 	# run(ds_dir='test', load_cache=True)
 	run(ds_dir='trainingcamp-nirspark', load_cache=True)
-	

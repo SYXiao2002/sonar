@@ -18,7 +18,7 @@ from typing import Dict, Literal, Optional, Sequence
 import numpy as np
 from matplotlib import pyplot as plt
 
-from sonar.analysis.intensity_analysis import IntensityAnalyzer, Peak
+from sonar.analysis.intensity_analysis import IntensityAnalyzer, HighIntensity
 from sonar.core.analysis_context import SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
@@ -251,7 +251,7 @@ class TrendTopomap():
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=40)
+				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr)
 
 				self._computed_high_intensity[sub_idx] = intensity_analyzer
 
@@ -263,7 +263,7 @@ class TrendTopomap():
 			intensity_analyser: IntensityAnalyzer
 			label = self.dataset.label_l[sub_idx]
 			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
-			Peak.save_sequence_to_csv(intensity_analyser.segments, csv_path)
+			HighIntensity.save_sequence_to_csv(intensity_analyser.segments, csv_path)
 
 	def plot_trends(self, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
 		if sub_idx is None:
@@ -435,13 +435,18 @@ class TrendTopomap():
 		plt.close(fig)
 
 	def set_region_selector(self, region_selector: RegionSelector):
+		if region_selector is None:
+			region_selector = RegionSelector(
+				start_sec=self.dataset['time'][0],
+				end_sec=self.dataset['time'][-1]
+			)
 		self.region_selector = region_selector
 
 	def _compute_channel_status(self):
 		for sub_idx, analyzer in self._computed_high_intensity.items():
 			analyzer: IntensityAnalyzer
 			sub_trends: Sequence[Sequence[int]] = self._computed_trends_binery[sub_idx]  # shape: [n_channels][n_timepoints]
-			peak_regions: Sequence[Peak] = analyzer.segments
+			peak_regions: Sequence[HighIntensity] = analyzer.segments
 			time_arr = analyzer.times  # shape: [n_timepoints]
 
 			for peak in peak_regions:
