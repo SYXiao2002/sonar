@@ -18,18 +18,11 @@ def run(ds_dir='test', load_cache='False'):
 
 	extract_hbo(dataset, output_dir=os.path.join('out', ds_dir))
 
-def plot_solo_seg(ds_dir):
+def plot_solo_seg(ds_dir, annotation_path, SubjectChannel_l):
 	ds, _ = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True)
-	seg_annotation: Sequence[Annotation] = read_annotations('res/trainingcamp-svmarker/solo.csv')
+	seg_annotation: Sequence[Annotation] = read_annotations(annotation_path)
 	out_dir = os.path.join('out', ds_dir, 'fig_waveform')
 	os.makedirs(out_dir, exist_ok=True)
-
-	SubjectChannel_l = [
-		{'sub_label': 'HC9', 'ch_idx': 48, 'desc': 'cello, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-		{'sub_label': 'HC9', 'ch_idx': 35, 'desc': 'celo, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
-		{'sub_label': 'HC7', 'ch_idx': 48, 'desc': 'piano, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-		{'sub_label': 'HC7', 'ch_idx': 35, 'desc': 'piano, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	]
 
 	region_selector_l = [
 		(RegionSelector(start_sec=seg.start, length_sec=seg.duration), seg.label) for seg in seg_annotation
@@ -86,6 +79,18 @@ def plot_solo_seg(ds_dir):
 		plt.close()
 
 if __name__ == "__main__":
-	plot_solo_seg(ds_dir = 'trainingcamp-mne-april')
+	SubjectChannel_l = [
+		{'sub_label': 'HC1', 'ch_idx': 48, 'desc': 'cello, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
+		{'sub_label': 'HC3', 'ch_idx': 35, 'desc': 'celo, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
+		{'sub_label': 'HC5', 'ch_idx': 48, 'desc': 'piano, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
+	]
+	# SubjectChannel_l = [
+	# 	{'sub_label': 'HC9', 'ch_idx': 48, 'desc': 'cello, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
+	# 	{'sub_label': 'HC9', 'ch_idx': 35, 'desc': 'celo, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
+	# 	{'sub_label': 'HC7', 'ch_idx': 48, 'desc': 'piano, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
+	# 	{'sub_label': 'HC7', 'ch_idx': 35, 'desc': 'piano, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
+	# ]
+
+	plot_solo_seg(ds_dir = 'trainingcamp-mne-april', annotation_path='res/trainingcamp-svmarker/solo.csv', SubjectChannel_l=SubjectChannel_l)
 	# plot_solo_seg(ds_dir = 'trainingcamp-mne-may')
 	# plot_solo_seg(ds_dir = 'trainingcamp-nirspark')

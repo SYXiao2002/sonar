@@ -4,6 +4,7 @@ Author: Yixiao Shen
 Date: 2025-05-28
 Purpose: Multi-channel Trend Synchrony
 """
+from dataclasses import dataclass
 import os
 from collections import Counter
 from typing import Optional, Sequence
@@ -21,11 +22,19 @@ from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.sv_marker import Annotation, read_annotations
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
 
-def plot_ch_count_heatmap(freq_dict, label, output_dir):
+@dataclass
+class ChannelTestResult:
+	channel: str
+	real_count: int
+	real_percent: float
+	p_value: float
+	p_value_corrected: float
+	significant: bool
+
+def plot_ch_count_heatmap(result: Sequence[ChannelTestResult], sub_label, output_dir=None):
 	fig = plt.figure(figsize=(12, 8))
 	main_ax = fig.add_subplot(111)
 	main_ax.axis('off')
-	os.makedirs(output_dir, exist_ok=True)
 
 	box_width = 0.07
 	box_height = 0.10
@@ -36,7 +45,6 @@ def plot_ch_count_heatmap(freq_dict, label, output_dir):
 	ch_pos_l = normalize_positions(ch_pos_l, box_width, box_height, x_range=(0.02, 0.9), y_range=(0.05, 0.9))
 
 	# === 频率值归一化到 0~1，用于映射颜色 ===
-	values = list(freq_dict.values())
 	norm = colors.Normalize(vmin=85, vmax=100)
 	cmap = cm.get_cmap('gist_yarg')  # 可换为 'hot' 'viridis' 等
 
@@ -48,8 +56,7 @@ def plot_ch_count_heatmap(freq_dict, label, output_dir):
 		ax_inset.set_yticks([])
 
 		# === 获取频率值和颜色 ===
-		key = f'ch{ch_idx+1}'
-		val = freq_dict.get(key, 0)
+		val = result[ch_idx].real_percent
 		color = cmap(norm(val))
 		ax_inset.set_title(f'Ch{ch_idx+1}: {int(val)}%', fontsize=7, pad=2)
 
@@ -64,19 +71,13 @@ def plot_ch_count_heatmap(freq_dict, label, output_dir):
 	# === 绘制背景结构等（如需） ===
 	plot_anatomical_labels(plt, 2)
 
-	plt.suptitle(f'Topomap: Channel Contribution Rate, {label}', fontsize=14)
-	plt.savefig(os.path.join(output_dir, f"{label}.png"), dpi = 600)
+	plt.suptitle(f'Topomap: Channel Contribution Rate, {sub_label}', fontsize=14)
+	if output_dir is not None:
+		os.makedirs(output_dir, exist_ok=True)
+		plt.savefig(os.path.join(output_dir, f"{sub_label}.png"), dpi = 600)
+	else:
+		plt.show()
 
-
-import numpy as np
-import pandas as pd
-from typing import Sequence
-from collections import Counter
-from statsmodels.stats.multitest import multipletests
-from tqdm import tqdm
-
-# 假设 Peak 类已定义并可正常导入
-# from yourmodule import Peak
 
 def count_real_channel_participation(peaks: Sequence[Peak]):
 	"""Count real participation frequency for each channel"""
@@ -134,7 +135,7 @@ def apply_fdr_correction(p_values: dict, alpha=0.05):
 
 	return dict(zip(ch_names, pvals_corrected)), dict(zip(ch_names, reject))
 
-def peak_permutation_test(csv_path: str, n_perm=1000, seed=42):
+def peak_permutation_test(csv_path: str, n_perm=1000, seed=42)-> Sequence[ChannelTestResult]:
 	"""整体测试流程"""
 	peaks = Peak.load_sequence_from_csv(csv_path)
 	real_freq, real_percent = count_real_channel_participation(peaks)
@@ -142,21 +143,23 @@ def peak_permutation_test(csv_path: str, n_perm=1000, seed=42):
 	p_values = compute_p_values(real_freq, perm_distributions)
 	pvals_corrected, reject = apply_fdr_correction(p_values)
 
-	results = []
-	for ch in real_freq.keys():
-		results.append({
-			'channel': ch,
-			'real_count': real_freq[ch],
-			'real_percent': real_percent[ch],
-			'p_value': p_values[ch],
-			'p_value_corrected': pvals_corrected[ch],
-			'significant': reject[ch]
-		})
+	results = [
+		ChannelTestResult(
+			channel=ch,
+			real_count=real_freq[ch],
+			real_percent=real_percent[ch],
+			p_value=p_values[ch],
+			p_value_corrected=pvals_corrected[ch],
+			significant=reject[ch]
+		)
+		for ch in real_freq
+	]
 
-	return pd.DataFrame(results)
+	return results
 
 # 示例使用
 if __name__ == "__main__":
-	csv_path = 'out/wh_test/raw_high_intensity/wh_converted.csv'
-	results_df = peak_permutation_test(csv_path, n_perm=1000, seed=42)
-	print(results_df)
+	csv_path = 'out/trainingcamp-pure/raw_high_intensity/HC1.csv'
+	results: Sequence[ChannelTestResult] = peak_permutation_test(csv_path, n_perm=1000, seed=42)
+	print(pd.DataFrame(results))
+	plot_ch_count_heatmap(result=results, sub_label='HC1', output_dir='out')

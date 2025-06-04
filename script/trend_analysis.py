@@ -47,8 +47,9 @@ def run(ds_dir='test', load_cache='False'):
 
 	intensity_window_selector = WindowSelector(window_size=1, step=0.1)
 
-	# region_selector = RegionSelector(start_sec=2230, end_sec=570)
-	region_selector = None
+	# region_selector = RegionSelector(start_sec=2230, length_sec=300)
+	region_selector = RegionSelector(center_sec=2755, length_sec=100)
+	# region_selector = None
 
 	trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
 							  dataset=dataset, intensity_window_selector=intensity_window_selector, 
@@ -58,11 +59,14 @@ def run(ds_dir='test', load_cache='False'):
 							  heartrate_dir='res/heartrate/trainingCamp-mne')
 
 	trend_topomap.plot_trends()
-	trend_topomap.plot_high_intensity()
+	# trend_topomap.plot_high_intensity()
 
 
 if __name__ == "__main__":
 	# run(ds_dir='wh_test', load_cache=False)
-	run(ds_dir='trainingcamp-pure', load_cache=False)
+	run(ds_dir='trainingcamp-mne-april', load_cache=True)
+	run(ds_dir='trainingcamp-mne-may', load_cache=True)
+	run(ds_dir='trainingcamp-pure', load_cache=True)
 	# run(ds_dir='test', load_cache=True)
+	run(ds_dir='trainingcamp-nirspark', load_cache=True)
 	

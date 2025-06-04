@@ -350,7 +350,7 @@ class TrendTopomap():
 		ax2.legend(loc='upper right', fontsize=8)
 
 		# --- ax3: Intensity Plot ---
-		ax3.set_ylabel(f"Intensity\n{self.intenisty_window_selector}")
+		ax3.set_ylabel(f"Intensity\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
 		ax3.grid(True)
 
 		intensity = self._computed_intensity.get(sub_idx, {})
