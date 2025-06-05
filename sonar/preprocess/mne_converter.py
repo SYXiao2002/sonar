@@ -64,6 +64,10 @@ def convert2hbo(raw_intensity, filter_param_list, debug=False, channel_idx=0):
 		plt.figure(figsize=(12, 5))
 		plt.plot(times, raw_data_before, label='Raw (Unfiltered)', alpha=0.7)
 
+	# no filter
+	if filter_param_list is None:
+		return raw_haemo_base
+
 	# 对每一套 filter 参数进行滤波、提取数据、绘图
 	filtered_results = []
 	for fl, fh, ftl, fth in filter_param_list:
@@ -92,7 +96,12 @@ def convert2hbo(raw_intensity, filter_param_list, debug=False, channel_idx=0):
 def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_param_list, debug, override, thr=30):
 
 	# find all snirf files in the dir/snirf
-	hbo_dir = os.path.join(ds_dir, 'hbo')
+	hbo_normalized_dir = os.path.join(ds_dir, 'hbo')
+	hbp_raw_dir = os.path.join(ds_dir, 'hbo_raw')
+	os.makedirs(hbo_normalized_dir, exist_ok=True)
+	os.makedirs(hbp_raw_dir, exist_ok=True)
+
+	
 	snirf_dir = os.path.join(ds_dir, 'snirf')
 	snirf_file_l = [os.path.join(snirf_dir, f) for f in os.listdir(snirf_dir) if f.endswith('.snirf')]
 
@@ -104,15 +113,6 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 		# Define the roi here!!!
 		start_time, _ = get_trigger_times(raw, first_trigger) 
 		_, end_time = get_trigger_times(raw, last_trigger)
-
-		# Determine the folder and base name of the file
-		base_name = os.path.splitext(os.path.basename(f))[0]
-		hbo_path = os.path.join(hbo_dir, f'{base_name}.csv')
-		
-		# Check if the corresponding csv file exists, if so, return immediately
-		if os.path.exists(hbo_path) and not override:
-			print(f'{hbo_path} already exists, skipping further processing.')
-			return
 
 		# Calculate the expanded cropping range
 		tmin_expand = max(0, start_time - thr)
@@ -136,15 +136,26 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 
 		print("Saving data to CSV...")
 		df = pd.DataFrame(hbo.get_data().T, columns=hbo.ch_names)
+		df["time"] = hbo.times + time_shifting
+		
+		# Determine the folder and base name of the file
+		base_name = os.path.splitext(os.path.basename(f))[0]
+		hbo_path = os.path.join(hbp_raw_dir, f'{base_name}.csv')
+		df.to_csv(hbo_path, index=False)
+		
+		# # Check if the corresponding csv file exists, if so, return immediately
+		# if os.path.exists(hbo_path) and not override:
+		# 	print(f'{hbo_path} already exists, skipping further processing.')
+		# 	return
 
 		# apply z-score normalization
 		for col in df.columns:
+			if col == 'time':
+				continue
 			mean = df[col].mean()
 			std = df[col].std()
 			df[col] = (df[col] - mean) / std
-
-		df["time"] = hbo.times + time_shifting
-
+		
+		hbo_path = os.path.join(hbo_normalized_dir, f'{base_name}.csv')
 		df.to_csv(hbo_path, index=False)
-
 		print(f'Duration Final: {hbo.times[-1] - hbo.times[0]}')

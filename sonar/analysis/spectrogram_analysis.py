@@ -149,4 +149,4 @@ def run(ds_dir):
 	processor.plot(subject_idx=0, dB_threshold=-20, f_lim=(1.0, 2.0))
 
 if __name__ == '__main__':
-	run(ds_dir='trainingcamp-no-filter')
+	run(ds_dir='trainingcamp-mne-no-filter')
