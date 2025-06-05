@@ -104,12 +104,18 @@ class HighIntensityAnalyzer:
 
 	def _save(self):
 		output_dir = os.path.join(self.output_dir, 'raw_permutation')
+		wjy_request_dir = os.path.join(self.output_dir, 'wjy_request')
 		os.makedirs(output_dir, exist_ok=True)
+		os.makedirs(wjy_request_dir, exist_ok=True)
 		for sub_label in self.sub_label_l:
-			result, _ = self.results[sub_label]
+			result, _, wjy_request_1k, wjy_request_real = self.results[sub_label]
 			csv_path = os.path.join(output_dir, f"{sub_label}.csv")
 			df = pd.DataFrame(result)
 			df.to_csv(csv_path, index=False)
+			df = pd.DataFrame(wjy_request_1k)
+			df.to_csv(os.path.join(wjy_request_dir, f"{sub_label}_1k.csv"), index=False)
+			df = pd.Series(wjy_request_real).to_frame().T
+			df.to_csv(os.path.join(wjy_request_dir, f"{sub_label}_real.csv"), index=False)
 
 def count_real_channel_participation(peaks: Sequence[HighIntensity]):
 	"""Count real participation frequency for each channel"""
@@ -187,7 +193,7 @@ def peak_permutation_test(csv_path: str, n_perm=1000, seed=42)-> Sequence[Channe
 		for ch in real_freq
 	]
 
-	return results, len(peaks)
+	return results, len(peaks), perm_distributions, real_freq
 
 if __name__ == '__main__':
 	HighIntensityAnalyzer(ds_dir='out/trainingcamp-mne-april')

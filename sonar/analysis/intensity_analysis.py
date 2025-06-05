@@ -78,7 +78,7 @@ class HighIntensity(RegionSelector):
 
 
 class IntensityAnalyzer:
-	def __init__(self, times: Sequence[float], values: Sequence[float], smooth_size=50, threshold=30, max_value=40):
+	def __init__(self, times: Sequence[float], values: Sequence[float], smooth_size=50, threshold=30, max_value=None):
 		"""
 		Initialize the intensity analyzer.
 
@@ -91,7 +91,7 @@ class IntensityAnalyzer:
 		self.values = np.array(values)
 		self.smooth_size = smooth_size
 		self.threshold = threshold
-		# self.max_value = max_value
+		self.max_value = max_value
 		self.segments: Sequence[HighIntensity] = []
 		self.smoothed: Sequence[float] = None
 
@@ -129,8 +129,9 @@ class IntensityAnalyzer:
 				start_sec=times[start_idx],
 				end_sec=times[end_idx]
 			)
-			# if peak_value < self.max_value:
-			# 	continue
+			if self.max_value is not None:
+				if peak_value < self.max_value:
+					continue
 			segments.append(peak)
 
 		return segments

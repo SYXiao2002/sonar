@@ -1,6 +1,7 @@
 import os
 from tqdm import tqdm 
 
+from sonar.analysis.high_intensity_analysis import HighIntensityAnalyzer
 from sonar.analysis.trend_topomap import TrendTopomap
 from sonar.analysis.waveform_topomap import WaveformTopomap
 from sonar.core.dataset_loader import get_dataset
@@ -49,10 +50,12 @@ def run(ds_dir='test', load_cache='False'):
 
 	region_selector_l = [
 		None,
-		RegionSelector(start_sec=2230, length_sec=600),
+		# RegionSelector(start_sec=2230, length_sec=600),
+		# RegionSelector(center_sec=2752, length_sec=100), #回马枪
+
 	]
 
-	# waveform_topomap = WaveformTopomap(ds, region_selector, 'res/test/snirf_metadata.csv', os.path.join('out', ds_dir, 'fig_waveform_topomap'))
+	# waveform_topomap = WaveformTopomap(ds, region_selector_l[0], 'res/test/snirf_metadata.csv', os.path.join('out', ds_dir, 'fig_waveform_topomap'))
 	# waveform_topomap.plot(['HC1', 'HC3', 'HC5'])
 	# return
 
@@ -60,20 +63,21 @@ def run(ds_dir='test', load_cache='False'):
 							  dataset=ds, intensity_window_selector=intensity_window_selector, 
 							  mode='increasing', min_duration=1, 
 							  annotations=annotations, region_selector=None, debug=False,
-							  high_intensity_thr=30,
+							  high_intensity_thr=30, max_value=None,
 							  heartrate_dir='res/heartrate/trainingCamp-mne')
 
 	for r in region_selector_l:
 		trend_topomap.set_region_selector(r)
 		trend_topomap.plot_trends()
-
+	trend_topomap.permutation_test()
 	# trend_topomap.plot_high_intensity()
 
 
 if __name__ == "__main__":
 	# run(ds_dir='wh_test', load_cache=False)
 	run(ds_dir='trainingcamp-mne-april', load_cache=True)
-	run(ds_dir='trainingcamp-mne-may', load_cache=True)
-	run(ds_dir='trainingcamp-pure', load_cache=True)
+	# run(ds_dir='trainingcamp-mne-may', load_cache=True)
+	# run(ds_dir='trainingcamp-pure', load_cache=True)
 	# run(ds_dir='test', load_cache=True)
-	run(ds_dir='trainingcamp-nirspark', load_cache=True)
+	# run(ds_dir='trainingcamp-nirspark', load_cache=True)
+	# run(ds_dir='trainingcamp-mne-june', load_cache=True)

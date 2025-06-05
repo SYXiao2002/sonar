@@ -6,9 +6,13 @@ from typing import Sequence
 from matplotlib import pyplot as plt
 from matplotlib import lines
 from matplotlib.lines import lineStyles
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
 
+from sonar.core import region_selector
 from sonar.core.analysis_context import SubjectChannel
-from sonar.core.dataset_loader import extract_hbo, get_dataset
+from sonar.core.dataset_loader import DatasetLoader, extract_hbo, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.sv_marker import Annotation, read_annotations
 
@@ -78,19 +82,70 @@ def plot_solo_seg(ds_dir, annotation_path, SubjectChannel_l):
 		plt.savefig(os.path.join(path, f'{r.start_sec:.0f}-{r.end_sec:.0f}.png'), dpi=600)
 		plt.close()
 
-if __name__ == "__main__":
-	SubjectChannel_l = [
-		{'sub_label': 'HC1', 'ch_idx': 48, 'desc': 'cello, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-		{'sub_label': 'HC3', 'ch_idx': 35, 'desc': 'celo, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
-		{'sub_label': 'HC5', 'ch_idx': 48, 'desc': 'piano, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	]
-	# SubjectChannel_l = [
-	# 	{'sub_label': 'HC9', 'ch_idx': 48, 'desc': 'cello, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	# 	{'sub_label': 'HC9', 'ch_idx': 35, 'desc': 'celo, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	# 	{'sub_label': 'HC7', 'ch_idx': 48, 'desc': 'piano, pre-motor(ch48)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	# 	{'sub_label': 'HC7', 'ch_idx': 35, 'desc': 'piano, auditory(ch35)'},	#cello, left, pre-motor 81% (Talairach daemon)
-	# ]
 
-	plot_solo_seg(ds_dir = 'trainingcamp-mne-april', annotation_path='res/trainingcamp-svmarker/solo.csv', SubjectChannel_l=SubjectChannel_l)
-	# plot_solo_seg(ds_dir = 'trainingcamp-mne-may')
-	# plot_solo_seg(ds_dir = 'trainingcamp-nirspark')
+def plot_segments(dataset: DatasetLoader, sub_label_l: Sequence[str], channel_l: Sequence[int], annotation_l: Sequence[Annotation], out_dir):
+	df = pd.DataFrame(annotation_l)
+	seg_label_dict = {}
+	for a in annotation_l:
+		seg_label_dict[a.label] = 1
+
+	groups = df.groupby('label')
+
+
+	for label, group_df in tqdm(groups, desc="Labels"):
+		for ch_idx in tqdm(channel_l, desc=f"Channels for {label}", leave=False):
+			path = os.path.join(out_dir, label)
+			os.makedirs(path, exist_ok=True)
+			path = os.path.join(path, f'CH{ch_idx}.png')
+
+			n = len(group_df)
+			max_per_row = 4
+			n_rows = (n + max_per_row - 1) // max_per_row
+
+			fig, axes = plt.subplots(n_rows, max_per_row, figsize=(16, 3 * n_rows))
+			axes = axes.flatten()
+
+			for i, (idx, row) in enumerate(group_df.iterrows()):
+				ax = axes[i]
+				ax.set_title(f"Subplot {i+1}")
+				region_selector = RegionSelector(start_sec=row['start'], length_sec=row['duration'])
+				for sub_label in sub_label_l:
+					ax.plot(dataset['time'], dataset[sub_label][ch_idx-1], label=sub_label)
+				ax.axvspan(region_selector.start_sec, region_selector.end_sec, color='orange', alpha=0.3)
+				ax.set_xlim(region_selector.start_sec-10, region_selector.end_sec+10)
+				ax.set_xlabel('Time (s)')
+				ax.set_ylim(-1, 1)
+
+				xticks = np.arange(region_selector.start_sec-10, region_selector.end_sec + 10 + 1, 5).astype(int)
+				ax.set_xticks(xticks)
+				ax.set_xticklabels(xticks, rotation=45)
+				ax.axhline(y=0, color='k', linestyle='--', alpha=0.3)
+
+				if i % max_per_row == 0:
+					ax.legend()
+
+			for j in range(n, len(axes)):
+				axes[j].axis('off')
+
+			fig.suptitle(f'{label}, CH{ch_idx}')
+			plt.tight_layout()
+			plt.savefig(path, dpi=600)
+			plt.close(fig)  # 关闭图，防止内存泄漏
+
+
+
+
+if __name__ == "__main__":
+	ds, _ = get_dataset(ds_dir=os.path.join('res', 'trainingcamp-nirspark'), load_cache=True)
+	annotation_l = read_annotations('res/trainingcamp-svmarker/solo.csv')
+	channel_l = [35, 48, 40, 43, 38, 20, 18, 16, 10, 11, 29]
+
+
+	out_dir = os.path.join('out', 'segments-view', 'audience')
+	sub_label_l = ['HC1', 'HC3', 'HC5']
+	plot_segments(ds, sub_label_l, channel_l,  annotation_l, out_dir=out_dir)
+
+
+	out_dir = os.path.join('out', 'segments-view', 'performer')
+	sub_label_l = ['HC7', 'HC9']
+	plot_segments(ds, sub_label_l, channel_l,  annotation_l, out_dir=out_dir)

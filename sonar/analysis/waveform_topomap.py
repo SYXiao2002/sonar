@@ -8,6 +8,7 @@ Purpose: waveform topomap
 import os
 
 from matplotlib import pyplot as plt
+import numpy as np
 
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
@@ -32,7 +33,7 @@ class WaveformTopomap:
 
 		pass
 
-	def plot(self, sub_label_l):
+	def plot(self, sub_label_l, suptitle=None):
 		fig = plt.figure(figsize=(12, 8))
 		main_ax = fig.add_subplot(111)
 		main_ax.axis('off')
@@ -48,10 +49,20 @@ class WaveformTopomap:
 				line, = ax_inset.plot(self.dataset['time'], self.dataset[sub_label][ch_idx])
 				lines.append(line)
 
-			ax_inset.set_xlim(self.region_selector.get_xlim_range())
+			# ax_inset.set_ylim(-1, 1)
 			ax_inset.set_ylim(-5, 5)
 			ax_inset.tick_params(axis='both', labelsize=6, direction='in')
 			ax_inset.set_title(f'Ch{ch_idx+1}', fontsize=7, pad=2)
+
+			xticks = ax_inset.get_xticks()
+			xticks = np.arange(self.region_selector.start_sec-10, self.region_selector.end_sec + 10 + 1, 5).astype(int)
+			# round xticks
+			xticks = np.round(xticks, 0)
+			ax_inset.set_xticks(xticks)
+			ax_inset.set_xticklabels(xticks, rotation=45)  # Rotate 45 degrees
+
+			ax_inset.set_xlim(self.region_selector.get_xlim_range()[0] - 10, self.region_selector.get_xlim_range()[1] + 10)
+			plt.axvspan(self.region_selector.start_sec, self.region_selector.end_sec, color='orange', alpha=0.2)
 
 			# Add legend only to selected channels to avoid visual clutter
 			if ch_idx + 1 in {48, 36, 35, 16, 15}:
@@ -65,9 +76,10 @@ class WaveformTopomap:
 				)
 
 		plot_anatomical_labels(plt)
-		fig.suptitle(f"Wavefrom Topomap: center: {self.region_selector.center_sec:.0f}s, length: {self.region_selector.length_sec:.0f}s", fontsize=14)
+		if suptitle is not None:
+			fig.suptitle(suptitle, fontsize=14)
 		plt.tight_layout()
-		path = os.path.join(self.output_dir, f'waveform_topomap_{self.region_selector.start_sec:.0f}.png')
+		path = os.path.join(self.output_dir, f'waveform_topomap_{self.region_selector.start_sec:.0f}-{self.region_selector.end_sec:.0f}s.png')
 		plt.savefig(path, dpi=600)
 
 	def example():

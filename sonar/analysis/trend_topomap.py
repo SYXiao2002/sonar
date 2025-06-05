@@ -18,6 +18,7 @@ from typing import Dict, Literal, Optional, Sequence
 import numpy as np
 from matplotlib import pyplot as plt
 
+from sonar.analysis.high_intensity_analysis import HighIntensityAnalyzer
 from sonar.analysis.intensity_analysis import IntensityAnalyzer, HighIntensity
 from sonar.core.analysis_context import SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
@@ -48,6 +49,7 @@ class TrendTopomap():
 		annotations: Optional[Sequence[Annotation]] = None,
 		debug: bool = False,
 		high_intensity_thr: int = 30,
+		max_value: Optional[int] = None,
 		heartrate_dir: Optional[str] = 'res/heartrate/test'
 	):
 		self.dataset = dataset
@@ -59,6 +61,7 @@ class TrendTopomap():
 		self.output_dir = output_dir
 		self.thr = high_intensity_thr
 		self.heartrate_dir = heartrate_dir
+		self.max_value = max_value
 
 		os.makedirs(self.output_dir, exist_ok=True)
 
@@ -251,7 +254,7 @@ class TrendTopomap():
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr)
+				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=self.max_value)
 
 				self._computed_high_intensity[sub_idx] = intensity_analyzer
 
@@ -366,11 +369,22 @@ class TrendTopomap():
 				y=thr,
 				xmin=self.region_selector.start_sec,
 				xmax=self.region_selector.end_sec,
-				label=f'thr={thr}',
+				label=f'thr-1={thr}',
 				color='red',
 				linestyle='--',
 				linewidth=1
 			)
+
+			if self.max_value is not None:
+				ax3.hlines(
+					y=self.max_value,
+					xmin=self.region_selector.start_sec,
+					xmax=self.region_selector.end_sec,
+					label=f'thr-2={self.max_value}',
+					color='red',
+					linestyle='--',
+					linewidth=1
+				)
 
 			ax3.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
 			ax3.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
@@ -464,6 +478,9 @@ class TrendTopomap():
 					channel_status.append(active)
 
 				peak.channel_status = channel_status
+
+	def permutation_test(self):
+		HighIntensityAnalyzer(ds_dir=self.output_dir)
 
 	@staticmethod
 	def example_run(ds_dir='test'):
