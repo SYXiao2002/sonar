@@ -19,7 +19,7 @@ class SpectrogramResult:
 	Sxx_dB: np.ndarray
 
 class SpectrogramProcessor:
-	def __init__(self, dataset, fs, nperseg=None, noverlap=None, nfft=4096, use_cache=True, cache_path='cache/spectrogram_cache.pkl'):
+	def __init__(self, dataset, fs, out_dir, nperseg=None, noverlap=None, nfft=4096, use_cache=True, cache_path='cache/spectrogram_cache.pkl'):
 		"""
 		dataset: list of subjects, each subject is a list of channels (1D signals)
 		"""
@@ -29,6 +29,7 @@ class SpectrogramProcessor:
 		self.nperseg = nperseg or int(fs * 10)
 		self.noverlap = noverlap or int(self.nperseg * 0.95)
 		self.nfft = nfft
+		self.out_dir = out_dir
 
 		self.results_raw: dict[int, SpectrogramResult] = {}
 		self.results_collapsed: dict[int, Sequence[float]] = {}
@@ -117,12 +118,12 @@ class SpectrogramProcessor:
 		self.results_collapsed = cache_data['results_collapsed']
 
 	def _save(self):
+		csv_dir = os.path.join('res', self.out_dir, 'spectrogram')
+		os.makedirs(csv_dir, exist_ok=True)
 		for sub_idx, sub_label in enumerate(self.dataset.label_l):
 			mean_freq = self.results_collapsed[sub_idx]
-			sub_dir = os.path.join('res', 'no-filter-spectrogram/trainingCamp-mne')
-			os.makedirs(sub_dir, exist_ok=True)
 			df = pd.DataFrame({'time': self.results_raw[sub_idx].t, 'freq': mean_freq})
-			df.to_csv(os.path.join(sub_dir, f'{sub_label}.csv'), index=False)
+			df.to_csv(os.path.join(csv_dir, f'{sub_label}.csv'), index=False)
 
 	def plot(self, subject_idx: int, dB_threshold=-20, f_lim=(0.8, 1.8)):
 		"""Plot spectrogram for a subject"""
@@ -144,9 +145,10 @@ class SpectrogramProcessor:
 
 def run(ds_dir):
 	dataset, _ = get_dataset(os.path.join('res', ds_dir), load_cache=True)
-	processor = SpectrogramProcessor(dataset, fs=11, use_cache=True, cache_path=os.path.join('cache', f'{ds_dir}.pkl'))
+	processor = SpectrogramProcessor(dataset, fs=11, use_cache=True, cache_path=os.path.join('cache', f'{ds_dir}.pkl'), out_dir=ds_dir)
 
 	processor.plot(subject_idx=0, dB_threshold=-20, f_lim=(1.0, 2.0))
 
 if __name__ == '__main__':
 	run(ds_dir='trainingcamp-mne-no-filter')
+	# run(ds_dir='yuanqu-mne-no-filter')

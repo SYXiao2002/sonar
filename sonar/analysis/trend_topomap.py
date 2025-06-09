@@ -100,6 +100,8 @@ class TrendTopomap():
 
 
 	def _get_heart_rate(self):
+		if self.heartrate_dir is None:
+			return
 		for sub_idx, sub_label in enumerate(self.dataset.label_l):
 			heart_rate_csv = os.path.join(self.heartrate_dir, f'{sub_label}.csv')
 			df = pd.read_csv(heart_rate_csv)
@@ -402,7 +404,8 @@ class TrendTopomap():
 
 		# --- ax4: Heart Rate ---
 		ax4.set_ylabel("Heart Rate (Hz)")
-		ax4.plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
+		if self.heartrate_dir is not None:
+			ax4.plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
 		ax4.grid(True)
 		ax4.set_ylim(1, 1.5)
 
