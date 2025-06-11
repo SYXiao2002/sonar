@@ -26,6 +26,7 @@ from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
 from sonar.preprocess.normalization import normalize_to_range
 from sonar.preprocess.sv_marker import Annotation
+from sonar.utils.brainregion_plot import annotate_yrange, map_channel_idx_to_y_axis
 from sonar.utils.file_helper import clear_folder
 from sonar.utils.trend_detector import Trend, TrendDetector
 
@@ -50,7 +51,7 @@ class TrendTopomap():
 		debug: bool = False,
 		high_intensity_thr: int = 30,
 		max_value: Optional[int] = None,
-		heartrate_dir: Optional[str] = 'res/heartrate/test'
+		heartrate_dir: Optional[str] = None
 	):
 		self.dataset = dataset
 		self.mode = mode
@@ -283,22 +284,60 @@ class TrendTopomap():
 		data = np.array(self.dataset[sub_idx])
 		n_channels, n_times = data.shape
 
-		fig, (ax1, ax2, ax3, ax4) = plt.subplots(
-			nrows=4,
+		n_subplot =4
+		max=10
+		ratios = [max, 1, 2, 1]
+		if self.heartrate_dir is None:
+			n_subplot-=1
+			ratios = [max, 2, 1]
+
+
+		fig, axs = plt.subplots(
+			nrows=n_subplot,
 			ncols=1,
 			figsize=(12, 8),
-			gridspec_kw={'height_ratios': [4, 1, 1, 1]},
+			gridspec_kw={'height_ratios': ratios, 'hspace': 0.1},
 			sharex=True
 		)
+		fig.subplots_adjust(left=0.1)
+
+		df = pd.read_csv('res/test/snirf_metadata.csv')
+		idx2y, mapped_df = map_channel_idx_to_y_axis(df)
+		inv_dict = {v: k for k, v in idx2y.items()}
 
 		# --- ax1: Trend Segments ---
-		ax1.set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
-		ax1.set_ylabel(f"Channel ({self.mode})")
-		ax1.set_ylim(-0.5, n_channels + 0.5)
-		ax1.set_yticks([i + 0.5 for i in range(0, n_channels, 2)])
-		ax1.set_yticklabels([f'ch {i + 1}' for i in range(0, n_channels, 2)])
-		ax1.invert_yaxis()
-		ax1.grid(True)
+		axs[0].set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
+		axs[0].set_yticklabels([])
+		axs[0].set_yticks([])
+		axs[0].set_ylim(-0.5, n_channels-0.5)
+
+		def pre_frontal_sd_category(ax, width=-0.05):
+			annotate_yrange(0, 22, 'Left Hemisphere', offset=width, width=width, text_kwargs={'rotation': 'vertical'}, ax=ax)
+			annotate_yrange(25, 47, 'Right Hemisphere', offset=width, width=width, text_kwargs={'rotation': 'vertical'}, ax=ax)
+			annotate_yrange(22.5, 24.5, 'Middle', offset=0, width=width*2, text_kwargs={'rotation': 'horizontal', 'fontsize': 9}, ax=ax)
+
+			annotate_yrange(0, 3, 'row\n5', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(4, 7, 'row\n4', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(8, 12, 'row\n3', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(13, 17, 'row\n2', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(18, 22, 'row\n1', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			
+			annotate_yrange(44, 47, 'row\n5', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(40, 43, 'row\n4', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(35, 39, 'row\n3', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(30, 34, 'row\n2', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			annotate_yrange(25, 29, 'row\n1', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+
+			ax.hlines(y=[-0.5, 3.5, 7.5, 12.5, 17.5,  29.5, 34.5, 39.5, 43.5, 47.5], xmin=self.dataset['time'][0], xmax=self.dataset['time'][-1], colors='gray', linewidth=1.5, linestyle='solid', alpha=1, zorder=3)
+			ax.hlines(y=[22.5, 24.5], xmin=self.dataset['time'][0], xmax=self.dataset['time'][-1], colors='black', linewidth=1.5, linestyle='solid', alpha=1, zorder=3)
+
+			ax.yaxis.set_ticks_position('right')
+			ax.yaxis.set_label_position('right')
+
+			ax.set_yticks([i for i in range(0, n_channels, 1)])
+			ax.set_yticklabels([f'ch{inv_dict[i]}' for i in range(0, n_channels, 1)], fontsize=7)
+				   
+		pre_frontal_sd_category(ax=axs[0])
 
 		# --- optimized trend drawing ---
 		sub_trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
@@ -312,27 +351,26 @@ class TrendTopomap():
 				# Accumulate hline data
 				lines_xmin.append(trend.start_sec)
 				lines_xmax.append(trend.end_sec)
-				lines_y.append(ch_idx + 0.5)
+				lines_y.append(idx2y[ch_idx+1])
 				# Accumulate scatter data
 				centers_x.append(trend.center_sec)
-				centers_y.append(ch_idx + 0.5)
+				centers_y.append(idx2y[ch_idx+1])
 				center_sizes.append(trend.height)
 
 		# Draw all trend segments together
-		ax1.hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='blue', linewidth=1, zorder=2)
+		axs[0].hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='gray', linewidth=1, zorder=2, alpha=0.4)
 
 		if centers_x:
-			center_sizes = normalize_to_range(center_sizes, min_val=1, max_val=10)
-			ax1.scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
+			center_sizes = normalize_to_range(center_sizes, min_val=1, max_val=7)
+			axs[0].scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
 
 		# --- ax2: Annotations ---
-		ax2.set_ylabel("Event")
-		ax2.set_yticks([])
-		ax2.set_ylim(0, 1)
-		ax2.grid(True)
+		axs[1].set_ylabel("Event")
+		axs[1].set_yticks([])
+		axs[1].set_ylim(0, 1)
 		xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
-		ax2.set_xticks(xticks)
-		ax2.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
+		axs[1].set_xticks(xticks)
+		axs[1].set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
 
 		label_colors = {}
 
@@ -350,13 +388,12 @@ class TrendTopomap():
 			event_spans[a.label].append((a.start, a.duration))
 
 		for label, spans in event_spans.items():
-			ax2.broken_barh(spans, (0, 1), facecolors=label_colors[label], alpha=0.5, label=label)
+			axs[1].broken_barh(spans, (0, 1), facecolors=label_colors[label], alpha=0.5, label=label)
 
-		ax2.legend(loc='upper right', fontsize=8)
+		axs[1].legend(loc='upper right', fontsize=8)
 
 		# --- ax3: Intensity Plot ---
-		ax3.set_ylabel(f"Intensity\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
-		ax3.grid(True)
+		axs[2].set_ylabel(f"Intensity\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
 
 		intensity = self._computed_intensity.get(sub_idx, {})
 		if intensity:
@@ -367,18 +404,18 @@ class TrendTopomap():
 			analyzer: IntensityAnalyzer = self._computed_high_intensity.get(sub_idx, {})
 			thr = analyzer.threshold
 
-			ax3.hlines(
+			axs[2].hlines(
 				y=thr,
 				xmin=self.region_selector.start_sec,
 				xmax=self.region_selector.end_sec,
-				label=f'thr-1={thr}',
+				label=f'thr={thr}',
 				color='red',
 				linestyle='--',
 				linewidth=1
 			)
 
 			if self.max_value is not None:
-				ax3.hlines(
+				axs[2].hlines(
 					y=self.max_value,
 					xmin=self.region_selector.start_sec,
 					xmax=self.region_selector.end_sec,
@@ -388,8 +425,8 @@ class TrendTopomap():
 					linewidth=1
 				)
 
-			ax3.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
-			ax3.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
+			axs[2].plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
+			axs[2].plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
 
 			# Vectorized mask creation
 			if analyzer.segments:
@@ -397,22 +434,26 @@ class TrendTopomap():
 				mask = np.logical_or.reduce([
 					(analyzer.times >= start) & (analyzer.times <= end) for start, end in segments
 				])
-				ax3.plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
+				axs[2].plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
 
-			ax3.legend()
+			axs[2].legend(
+				bbox_to_anchor=(1.0001, 1),  # (x, y) 坐标，1.02 表示稍微超出右边界，1 表示顶部对齐
+				loc="upper left",          # 图例的锚点位置（相对于 bbox_to_anchor）
+				borderaxespad=0.           # 图例与轴边界的间距
+			)
 
 
 		# --- ax4: Heart Rate ---
-		ax4.set_ylabel("Heart Rate (Hz)")
 		if self.heartrate_dir is not None:
-			ax4.plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
-		ax4.grid(True)
-		ax4.set_ylim(1, 1.5)
+			axs[3].set_ylabel("HR\n(Hz)")
+			axs[3].plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
+			axs[3].set_ylim(1, 1.5)
 
 		# --- Shared x limits ---
-		for ax in [ax1, ax2, ax3, ax4]:
+		for ax in axs:
+			ax.grid(True, axis='x', linestyle='--', color='gray', alpha=0.7)
 			ax.set_xlim(self.region_selector.start_sec, self.region_selector.end_sec)
-		ax4.set_xlabel("Time (s)")
+		axs[-1].set_xlabel("Time (s)")
 
 		# --- Save ---
 		fig.subplots_adjust(hspace=0.3)
@@ -488,7 +529,7 @@ class TrendTopomap():
 	@staticmethod
 	def example_run(ds_dir='test'):
 		clear_folder(os.path.join('out', ds_dir))
-		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=False)
+		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True)
 
 		window_selector = WindowSelector(window_size=1, step=0.1)
 
@@ -498,7 +539,6 @@ class TrendTopomap():
 							   high_intensity_thr=30)
 
 		trend_topomap.plot_trends()
-		# trend_topomap.plot_high_intensity()
 
 if __name__ == "__main__":
 	TrendTopomap.example_run(ds_dir='test')

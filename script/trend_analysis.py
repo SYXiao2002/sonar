@@ -43,17 +43,19 @@ def main():
 			trend_topomap.plot_trends(output_dir=fig_dir)
 			trend_topomap._save_trends_to_csv(save_path='out/test/trends_raw.csv')
 
-def run(ds_dir='test', load_cache='False', heartrate_dir=None):
+def run(ds_dir='test', load_cache='False', heartrate_dir=None, region_selector_l=None):
 	ds, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=load_cache)
 
 	intensity_window_selector = WindowSelector(window_size=1, step=0.1)
 
-	region_selector_l = [
-		# None,
-		RegionSelector(start_sec=2230, length_sec=600),
-		# RegionSelector(center_sec=2752, length_sec=100), #回马枪
 
-	]
+	if region_selector_l is None:
+		region_selector_l = [
+			None,
+			# RegionSelector(start_sec=2230, length_sec=600),
+			# RegionSelector(center_sec=2752, length_sec=100), #回马枪
+
+		]
 
 	# waveform_topomap = WaveformTopomap(ds, region_selector_l[0], 'res/test/snirf_metadata.csv', os.path.join('out', ds_dir, 'fig_waveform_topomap'))
 	# waveform_topomap.plot(['HC1', 'HC3', 'HC5'])
@@ -78,8 +80,14 @@ if __name__ == "__main__":
 	# run(ds_dir='test', load_cache=True)
 	# run(ds_dir='wh_test', load_cache=False)
 	# run(ds_dir='trainingcamp-pure', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
-	run(ds_dir='trainingcamp-mne-april', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
+	run(ds_dir='yuanqu-mne', load_cache=True, heartrate_dir='res/yuanqu-mne-no-filter/spectrogram', region_selector_l=[
+		None
+	])
+	run(ds_dir='trainingcamp-mne-april', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram', region_selector_l=[
+		RegionSelector(start_sec=2230, length_sec=600), RegionSelector(center_sec=2752, length_sec=100)
+	])
 	# run(ds_dir='trainingcamp-mne-may', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
 	# run(ds_dir='trainingcamp-mne-june', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
-	# run(ds_dir='trainingcamp-nirspark', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
-	# run(ds_dir='yuanqu-mne', load_cache=True, heartrate_dir='res/yuanqu-mne-no-filter/spectrogram')
+	run(ds_dir='trainingcamp-nirspark', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram', region_selector_l=[
+		RegionSelector(start_sec=2230, length_sec=600)
+	])

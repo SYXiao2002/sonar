@@ -7,6 +7,89 @@ import textwrap
 
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
 
+# from https://github.com/matplotlib/matplotlib/issues/6321#issuecomment-555587961
+def annotate_yrange(ymin, ymax,
+					label=None,
+					offset=-0.1,
+					width=-0.1,
+					ax=None,
+					patch_kwargs={'facecolor':'gray'},
+					line_kwargs={'color':'black'},
+					text_kwargs={'rotation':'vertical'}
+):
+	import matplotlib.pyplot as plt
+	import matplotlib.transforms as transforms
+
+	from matplotlib.patches import Rectangle
+	from matplotlib.lines import Line2D
+	if ax is None:
+		ax = plt.gca()
+
+	# x-coordinates in axis coordinates,
+	# y coordinates in data coordinates
+	trans = transforms.blended_transform_factory(
+		ax.transAxes, ax.transData)
+
+	# a bar indicting the range of values
+	rect = Rectangle((offset, ymin), width=width, height=ymax-ymin,
+					 transform=trans, clip_on=False, **patch_kwargs)
+	ax.add_patch(rect)
+
+	# delimiters at the start and end of the range mimicking ticks
+	min_delimiter = Line2D((offset+width, offset), (ymin, ymin),
+						   transform=trans, clip_on=False, **line_kwargs)
+	max_delimiter = Line2D((offset+width, offset), (ymax, ymax),
+						   transform=trans, clip_on=False, **line_kwargs)
+	ax.add_artist(min_delimiter)
+	ax.add_artist(max_delimiter)
+
+	# label
+	if label:
+		x = offset + 0.5 * width
+		y = ymin + 0.5 * (ymax - ymin)
+		# we need to fix the alignment as otherwise our choice of x
+		# and y leads to unexpected results;
+		# e.g. 'right' does not align with the minimum_delimiter
+		ax.text(x, y, label,
+				horizontalalignment='center', verticalalignment='center',
+				clip_on=False, transform=trans, **text_kwargs)
+
+def map_channel_idx_to_y_axis(df: pd.DataFrame, tol: float = 1e-6) -> dict:
+	"""
+	Map 2D topomap coordinates to 1D y-axis position using channel_idx as key.
+	Parameters:
+		df (pd.DataFrame): Input DataFrame with 'x', 'y', and 'channel_idx' columns
+		tol (float): Tolerance to detect midline channels
+	Returns:
+		dict: Mapping from channel_idx to y_axis_pos
+	"""
+	# Compute median x to define midline
+	x_median = df['x'].median()
+
+	# Label channel position
+	def classify_channel(x):
+		if abs(x - x_median) < tol:
+			return 'midline'
+		elif x < x_median:
+			return 'left'
+		else:
+			return 'right'
+
+	df = df.copy()
+	df['label'] = df['x'].apply(classify_channel)
+
+	# Sort by position rules
+	right = df[df['label'] == 'right'].sort_values(by=['y', 'x'], ascending=[True, True])
+	left = df[df['label'] == 'left'].sort_values(by=['y', 'x'], ascending=[False, True])
+	midline = df[df['label'] == 'midline'].sort_values(by='x')
+
+	# Concatenate in y-axis order
+	mapped = pd.concat([left, midline, right], ignore_index=True)
+	mapped['y_axis_pos'] = range(len(mapped))
+
+	# Create mapping dict
+	return dict(zip(mapped['channel_idx'], mapped['y_axis_pos'])), mapped
+
 def parse_region_csv(region_csv_path):
 	df = pd.read_csv(region_csv_path)
 	for col in df.select_dtypes(include='object').columns:
@@ -139,12 +222,12 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False):
 
 if __name__ == "__main__":
 	region_csv_l = [
-		'res/sd/AAL.csv',
-		'res/sd/Brodmann(MRIcro).csv',
-		'res/sd/LPBA40.csv',
-		'res/sd/Talairach.csv',
+		# 'res/sd/AAL.csv',
+		'res/brain-region-sd/Brodmann(MRIcro).csv',
+		# 'res/sd/LPBA40.csv',
+		# 'res/sd/Talairach.csv',
 	]
-	debug=False
+	debug=True
 
 	for region_csv in region_csv_l:
 		topomap_brain_region(region_csv, debug=debug)
