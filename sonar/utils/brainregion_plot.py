@@ -71,16 +71,16 @@ def map_channel_idx_to_y_axis(df: pd.DataFrame, tol: float = 1e-6) -> dict:
 		if abs(x - x_median) < tol:
 			return 'midline'
 		elif x < x_median:
-			return 'left'
-		else:
 			return 'right'
+		else:
+			return 'left'
 
 	df = df.copy()
 	df['label'] = df['x'].apply(classify_channel)
 
 	# Sort by position rules
-	right = df[df['label'] == 'right'].sort_values(by=['y', 'x'], ascending=[True, True])
-	left = df[df['label'] == 'left'].sort_values(by=['y', 'x'], ascending=[False, True])
+	right = df[df['label'] == 'right'].sort_values(by=['y', 'x'], ascending=[True, False])
+	left = df[df['label'] == 'left'].sort_values(by=['y', 'x'], ascending=[True, True])
 	midline = df[df['label'] == 'midline'].sort_values(by='x')
 
 	# Concatenate in y-axis order
