@@ -93,7 +93,7 @@ def convert2hbo(raw_intensity, filter_param_list, debug=False, channel_idx=0):
 	# 返回最后一套滤波结果（或可返回所有）
 	return filtered_results[0]
 
-def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_param_list, debug, override, thr=30):
+def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_param_list, debug, override, thr=30, z_score=True):
 
 	# find all snirf files in the dir/snirf
 	hbo_normalized_dir = os.path.join(ds_dir, 'hbo')
@@ -149,12 +149,13 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 		# 	return
 
 		# apply z-score normalization
-		for col in df.columns:
-			if col == 'time':
-				continue
-			mean = df[col].mean()
-			std = df[col].std()
-			df[col] = (df[col] - mean) / std
+		if z_score:
+			for col in df.columns:
+				if col == 'time':
+					continue
+				mean = df[col].mean()
+				std = df[col].std()
+				df[col] = (df[col] - mean) / std
 		
 		hbo_path = os.path.join(hbo_normalized_dir, f'{base_name}.csv')
 		df.to_csv(hbo_path, index=False)

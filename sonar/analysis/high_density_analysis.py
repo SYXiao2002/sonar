@@ -16,7 +16,7 @@ from matplotlib import cm, colors, pyplot as plt
 from statsmodels.stats.multitest import multipletests
 import pandas as pd
 
-from sonar.analysis.intensity_analysis import HighIntensity
+from sonar.analysis.density_analysis import HighDensity
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
 
 @dataclass
@@ -28,11 +28,11 @@ class ChannelTestResult:
 	p_value_corrected: float
 	significant: bool
 
-class HighIntensityAnalyzer:
+class HighDensityAnalyzer:
 	def __init__(self, ds_dir):
-		high_intensity_dir = os.path.join(ds_dir, 'raw_high_intensity')
-		self.high_intensity_csv_l = [os.path.join(high_intensity_dir, f) for f in os.listdir(high_intensity_dir) if f.endswith('.csv')]
-		self.sub_label_l = [f.split('.')[0] for f in os.listdir(high_intensity_dir)]
+		high_density_dir = os.path.join(ds_dir, 'raw_high_density')
+		self.high_density_csv_l = [os.path.join(high_density_dir, f) for f in os.listdir(high_density_dir) if f.endswith('.csv')]
+		self.sub_label_l = [f.split('.')[0] for f in os.listdir(high_density_dir)]
 		self.output_dir = ds_dir
 		self.results: dict[str, (Sequence[ChannelTestResult], int)] = {}
 		
@@ -42,7 +42,7 @@ class HighIntensityAnalyzer:
 
 	def _cal(self):
 		for sub_idx, sub_label in enumerate(self.sub_label_l):
-			csv_path = self.high_intensity_csv_l[sub_idx]
+			csv_path = self.high_density_csv_l[sub_idx]
 			result = peak_permutation_test(csv_path, n_perm=1000, seed=42)
 			self.results[sub_label] = result
 
@@ -117,7 +117,7 @@ class HighIntensityAnalyzer:
 			df = pd.Series(wjy_request_real).to_frame().T
 			df.to_csv(os.path.join(wjy_request_dir, f"{sub_label}_real.csv"), index=False)
 
-def count_real_channel_participation(peaks: Sequence[HighIntensity]):
+def count_real_channel_participation(peaks: Sequence[HighDensity]):
 	"""Count real participation frequency for each channel"""
 	num_channels = len(peaks[0].channel_status)
 	ch_freq = Counter({f'ch{i+1}': 0 for i in range(num_channels)})
@@ -132,7 +132,7 @@ def count_real_channel_participation(peaks: Sequence[HighIntensity]):
 
 	return ch_freq, ch_percent
 
-def build_permutation_distribution(peaks: Sequence[HighIntensity], n_perm=1000, seed=42):
+def build_permutation_distribution(peaks: Sequence[HighDensity], n_perm=1000, seed=42):
 	"""Build permutation-based null distribution"""
 	np.random.seed(seed)
 	num_channels = len(peaks[0].channel_status)
@@ -175,7 +175,7 @@ def apply_fdr_correction(p_values: dict, alpha=0.05):
 
 def peak_permutation_test(csv_path: str, n_perm=1000, seed=42)-> Sequence[ChannelTestResult]:
 	"""整体测试流程"""
-	peaks = HighIntensity.load_sequence_from_csv(csv_path)
+	peaks = HighDensity.load_sequence_from_csv(csv_path)
 	real_freq, real_percent = count_real_channel_participation(peaks)
 	perm_distributions = build_permutation_distribution(peaks, n_perm=n_perm, seed=seed)
 	p_values = compute_p_values(real_freq, perm_distributions)
@@ -196,4 +196,4 @@ def peak_permutation_test(csv_path: str, n_perm=1000, seed=42)-> Sequence[Channe
 	return results, len(peaks), perm_distributions, real_freq
 
 if __name__ == '__main__':
-	HighIntensityAnalyzer(ds_dir='out/trainingcamp-mne-april')
+	HighDensityAnalyzer(ds_dir='out/trainingcamp-mne-april')

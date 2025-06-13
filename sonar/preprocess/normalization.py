@@ -2,18 +2,21 @@ import numpy as np
 import pandas as pd
 import os
 
-def normalize_to_range(arr, min_val, max_val):
+def normalize_to_range(arr, min_val, max_val, lower_percentile=2, upper_percentile=98):
 	"""
-	Normalize array to [min_val, max_val]
+	Normalize array to [min_val, max_val] with outlier robustness using percentiles
 	"""
 	arr = np.array(arr)
-	x_min = arr.min()
-	x_max = arr.max()
-	if x_max == x_min:
-		return np.full_like(arr, (min_val + max_val) / 2)  # avoid division by zero
+	p_min = np.percentile(arr, lower_percentile)
+	p_max = np.percentile(arr, upper_percentile)
+	if p_max == p_min:
+		return np.full_like(arr, (min_val + max_val) / 2)
 
-	# Linear normalization
-	norm_arr = min_val + (arr - x_min) / (x_max - x_min) * (max_val - min_val)
+	# Clip to reduce outlier impact
+	arr_clipped = np.clip(arr, p_min, p_max)
+
+	# Normalize based on clipped bounds
+	norm_arr = min_val + (arr_clipped - p_min) / (p_max - p_min) * (max_val - min_val)
 	return norm_arr
 
 def hbo_normalize(file_path):

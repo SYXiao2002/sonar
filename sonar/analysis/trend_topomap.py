@@ -18,8 +18,8 @@ from typing import Dict, Literal, Optional, Sequence
 import numpy as np
 from matplotlib import pyplot as plt
 
-from sonar.analysis.high_intensity_analysis import HighIntensityAnalyzer
-from sonar.analysis.intensity_analysis import IntensityAnalyzer, HighIntensity
+from sonar.analysis.high_density_analysis import HighDensityAnalyzer
+from sonar.analysis.density_analysis import DensityAnalyzer, HighDensity
 from sonar.core.analysis_context import SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
@@ -33,7 +33,7 @@ from sonar.utils.trend_detector import Trend, TrendDetector
 matplotlib.use('Agg')
 
 @dataclass
-class Intensity:
+class Density:
 	time: float	# Center time of the window
 	ch_count: int	# Total trend count in this window
 
@@ -43,13 +43,13 @@ class TrendTopomap():
 		self,
 		output_dir: Optional[str],
 		dataset: DatasetLoader,
-		intensity_window_selector: WindowSelector,
+		density_window_selector: WindowSelector,
 		mode: Literal['increasing', 'decreasing'] = 'increasing',
 		min_duration: float = 5.0,
 		region_selector: Optional['RegionSelector'] = None,
 		annotations: Optional[Sequence[Annotation]] = None,
 		debug: bool = False,
-		high_intensity_thr: int = 30,
+		high_density_thr: int = 30,
 		max_value: Optional[int] = None,
 		heartrate_dir: Optional[str] = None
 	):
@@ -58,9 +58,9 @@ class TrendTopomap():
 		self.min_duration = min_duration
 		self.annotations = annotations if annotations is not None else []
 		self.debug = debug
-		self.intenisty_window_selector = intensity_window_selector
+		self.intenisty_window_selector = density_window_selector
 		self.output_dir = output_dir
-		self.thr = high_intensity_thr
+		self.thr = high_density_thr
 		self.heartrate_dir = heartrate_dir
 		self.max_value = max_value
 
@@ -76,8 +76,8 @@ class TrendTopomap():
 		# Save computed results
 		self._computed_trends: Dict[int, Sequence[Trend]] = {}
 		self._computed_trends_binery: Dict[int, Sequence[Sequence]] = {}
-		self._computed_intensity: Dict[int, Sequence[Intensity]] = {}
-		self._computed_high_intensity: Dict[int, Sequence[IntensityAnalyzer]] = {}
+		self._computed_density: Dict[int, Sequence[Density]] = {}
+		self._computed_high_density: Dict[int, Sequence[DensityAnalyzer]] = {}
 		self._heart_rate: Dict[int, (Sequence[float], Sequence[float])] = {}
 
 		# calculate
@@ -87,15 +87,15 @@ class TrendTopomap():
 	def _save(self):
 		print("Saving results...")
 		self._save_trends_to_csv()
-		self._save_intensity_to_csv()
+		self._save_density_to_csv()
 		self._save_trends_binery_to_csv()
-		self._save_high_intensity_to_csv()
+		self._save_high_density_to_csv()
 
 	def _calculate(self):
 		self._compute_trends()
 		self._convert_trends_to_binary()
-		self._compute_intensity()
-		self._extract_high_intensity(thr=self.thr)
+		self._compute_density()
+		self._extract_high_density(thr=self.thr)
 		self._compute_channel_status()
 		self._get_heart_rate()
 
@@ -200,7 +200,7 @@ class TrendTopomap():
 
 			df.to_csv(csv_path, index=False)
 
-	def _compute_intensity(self, window_selector: Optional[WindowSelector] = None):
+	def _compute_density(self, window_selector: Optional[WindowSelector] = None):
 		if window_selector is not None:
 			self.intenisty_window_selector = window_selector
 
@@ -214,9 +214,9 @@ class TrendTopomap():
 		step_len = int(step_size / dt)
 		num_windows = (n_samples - win_len) // step_len + 1
 
-		for sub_idx, bin_channels in tqdm(self._computed_trends_binery.items(), desc="_compute_intensity"):
+		for sub_idx, bin_channels in tqdm(self._computed_trends_binery.items(), desc="_compute_density"):
 			bin_arr = np.array(bin_channels)  # shape: (n_channels, n_samples)
-			ch_intensity_list = []
+			ch_density_list = []
 			total_counts = []
 
 			for ch_bin in bin_arr:
@@ -225,7 +225,7 @@ class TrendTopomap():
 					int(np.sum(ch_bin[i * step_len: i * step_len + win_len]))
 					for i in range(num_windows)
 				]
-				ch_intensity_list.append(counts)
+				ch_density_list.append(counts)
 
 			# Aggregate across channels for each window
 			for w_idx in range(num_windows):
@@ -234,42 +234,42 @@ class TrendTopomap():
 				center_time = (time_array[win_start_idx] + time_array[win_end_idx - 1]) / 2
 
 				# count how many channels have at least one active point in this window
-				ch_count = sum(1 for ch in ch_intensity_list if ch[w_idx] > 0)
-				total_counts.append(Intensity(time=center_time, ch_count=ch_count))
+				ch_count = sum(1 for ch in ch_density_list if ch[w_idx] > 0)
+				total_counts.append(Density(time=center_time, ch_count=ch_count))
 
-			self._computed_intensity[sub_idx] = total_counts
+			self._computed_density[sub_idx] = total_counts
 
-	def _save_intensity_to_csv(self):
-		intensity_csv_dir = os.path.join(self.output_dir, 'raw_intensity')
-		os.makedirs(intensity_csv_dir, exist_ok=True)
+	def _save_density_to_csv(self):
+		density_csv_dir = os.path.join(self.output_dir, 'raw_density')
+		os.makedirs(density_csv_dir, exist_ok=True)
 
 
-		for sub_idx, sub_intensity in self._computed_intensity.items():
+		for sub_idx, sub_density in self._computed_density.items():
 			label = self.dataset.label_l[sub_idx]
-			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
-			df = pd.DataFrame(sub_intensity)
+			csv_path = os.path.join(density_csv_dir, f"{label}.csv")
+			df = pd.DataFrame(sub_density)
 			df.to_csv(csv_path, index=False)
 
-	def _extract_high_intensity(self, thr):
-		for sub_idx, sub_intensity in tqdm(self._computed_intensity.items(), desc="_extract_high_intensity"):
-			if sub_intensity:
-				arr = np.array([(i.time, i.ch_count) for i in sub_intensity])
+	def _extract_high_density(self, thr):
+		for sub_idx, sub_density in tqdm(self._computed_density.items(), desc="_extract_high_density"):
+			if sub_density:
+				arr = np.array([(i.time, i.ch_count) for i in sub_density])
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				intensity_analyzer = IntensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=self.max_value)
+				density_analyzer = DensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=self.max_value)
 
-				self._computed_high_intensity[sub_idx] = intensity_analyzer
+				self._computed_high_density[sub_idx] = density_analyzer
 
-	def _save_high_intensity_to_csv(self):
-		intensity_csv_dir = os.path.join(self.output_dir, 'raw_high_intensity')
-		os.makedirs(intensity_csv_dir, exist_ok=True)
+	def _save_high_density_to_csv(self):
+		density_csv_dir = os.path.join(self.output_dir, 'raw_high_density')
+		os.makedirs(density_csv_dir, exist_ok=True)
 
-		for sub_idx, intensity_analyser in self._computed_high_intensity.items():
-			intensity_analyser: IntensityAnalyzer
+		for sub_idx, density_analyser in self._computed_high_density.items():
+			density_analyser: DensityAnalyzer
 			label = self.dataset.label_l[sub_idx]
-			csv_path = os.path.join(intensity_csv_dir, f"{label}.csv")
-			HighIntensity.save_sequence_to_csv(intensity_analyser.segments, csv_path)
+			csv_path = os.path.join(density_csv_dir, f"{label}.csv")
+			HighDensity.save_sequence_to_csv(density_analyser.segments, csv_path)
 
 	def plot_trends(self, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
 		if sub_idx is None:
@@ -361,7 +361,7 @@ class TrendTopomap():
 		axs[0].hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='gray', linewidth=1, zorder=2, alpha=0.4)
 
 		if centers_x:
-			center_sizes = normalize_to_range(center_sizes, min_val=1, max_val=7)
+			center_sizes = normalize_to_range(center_sizes, min_val=0.1, max_val=15)
 			axs[0].scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
 
 		# --- ax2: Annotations ---
@@ -392,16 +392,16 @@ class TrendTopomap():
 
 		axs[1].legend(loc='upper right', fontsize=8)
 
-		# --- ax3: Intensity Plot ---
-		axs[2].set_ylabel(f"Intensity\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
+		# --- ax3: Density Plot ---
+		axs[2].set_ylabel(f"Density\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
 
-		intensity = self._computed_intensity.get(sub_idx, {})
-		if intensity:
+		density = self._computed_density.get(sub_idx, {})
+		if density:
 			# Avoid list of tuples → np.array conversion
-			x_vals = np.fromiter((i.time for i in intensity), dtype=np.float32)
-			y_vals = np.fromiter((i.ch_count for i in intensity), dtype=np.float32)
+			x_vals = np.fromiter((i.time for i in density), dtype=np.float32)
+			y_vals = np.fromiter((i.ch_count for i in density), dtype=np.float32)
 
-			analyzer: IntensityAnalyzer = self._computed_high_intensity.get(sub_idx, {})
+			analyzer: DensityAnalyzer = self._computed_high_density.get(sub_idx, {})
 			thr = analyzer.threshold
 
 			axs[2].hlines(
@@ -464,12 +464,12 @@ class TrendTopomap():
 		plt.savefig(figure_path, dpi=dpi)
 		plt.close()
 
-	def plot_high_intensity(self, out_folder='fig_trends_with_high_intensity'):
+	def plot_high_density(self, out_folder='fig_trends_with_high_density'):
 		region_selector_tmp = self.region_selector
 		save_tasks = []
 
-		for sub_idx, analyzer in tqdm(self._computed_high_intensity.items(), desc="plot_high_intensity"):
-			analyzer: IntensityAnalyzer
+		for sub_idx, analyzer in tqdm(self._computed_high_density.items(), desc="plot_high_density"):
+			analyzer: DensityAnalyzer
 			region_selector_l: Sequence[RegionSelector] = analyzer.segments
 			fig_dir = os.path.join(out_folder, self.dataset.label_l[sub_idx])
 
@@ -501,10 +501,10 @@ class TrendTopomap():
 		self.region_selector = region_selector
 
 	def _compute_channel_status(self):
-		for sub_idx, analyzer in self._computed_high_intensity.items():
-			analyzer: IntensityAnalyzer
+		for sub_idx, analyzer in self._computed_high_density.items():
+			analyzer: DensityAnalyzer
 			sub_trends: Sequence[Sequence[int]] = self._computed_trends_binery[sub_idx]  # shape: [n_channels][n_timepoints]
-			peak_regions: Sequence[HighIntensity] = analyzer.segments
+			peak_regions: Sequence[HighDensity] = analyzer.segments
 			time_arr = analyzer.times  # shape: [n_timepoints]
 
 			for peak in peak_regions:
@@ -524,7 +524,7 @@ class TrendTopomap():
 				peak.channel_status = channel_status
 
 	def permutation_test(self):
-		HighIntensityAnalyzer(ds_dir=self.output_dir)
+		HighDensityAnalyzer(ds_dir=self.output_dir)
 
 	@staticmethod
 	def example_run(ds_dir='test'):
@@ -534,9 +534,9 @@ class TrendTopomap():
 		window_selector = WindowSelector(window_size=1, step=0.1)
 
 		trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
-							   dataset=dataset, intensity_window_selector=window_selector, mode='increasing', 
+							   dataset=dataset, density_window_selector=window_selector, mode='increasing', 
 							   min_duration=1.6, annotations=annotations, region_selector=None, debug=False,
-							   high_intensity_thr=30)
+							   high_density_thr=30)
 
 		trend_topomap.plot_trends()
 

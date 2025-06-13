@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from sonar.core.region_selector import RegionSelector
 
-class HighIntensity(RegionSelector):
+class HighDensity(RegionSelector):
 	def __init__(self,
 		highest_time, highest_value,
 		center_sec: Optional[float] = None,
@@ -32,7 +32,7 @@ class HighIntensity(RegionSelector):
 				f"active_ch={active_channels}>")
 
 	@classmethod
-	def save_sequence_to_csv(cls, peaks: Sequence["HighIntensity"], path: str):
+	def save_sequence_to_csv(cls, peaks: Sequence["HighDensity"], path: str):
 		if not peaks:
 			raise ValueError("Empty peak list.")
 
@@ -56,7 +56,7 @@ class HighIntensity(RegionSelector):
 		df.to_csv(path, index=False)
 
 	@classmethod
-	def load_sequence_from_csv(cls, path: str) -> Sequence["HighIntensity"]:
+	def load_sequence_from_csv(cls, path: str) -> Sequence["HighDensity"]:
 		df = pd.read_csv(path)
 		channel_cols = [col for col in df.columns if col.startswith("ch")]
 
@@ -77,7 +77,7 @@ class HighIntensity(RegionSelector):
 		return peaks
 
 
-class IntensityAnalyzer:
+class DensityAnalyzer:
 	def __init__(self, times: Sequence[float], values: Sequence[float], smooth_size=50, threshold=30, max_value=None):
 		"""
 		Initialize the intensity analyzer.
@@ -92,7 +92,7 @@ class IntensityAnalyzer:
 		self.smooth_size = smooth_size
 		self.threshold = threshold
 		self.max_value = max_value
-		self.segments: Sequence[HighIntensity] = []
+		self.segments: Sequence[HighDensity] = []
 		self.smoothed: Sequence[float] = None
 
 		self._compute()
@@ -106,7 +106,7 @@ class IntensityAnalyzer:
 		mask = values > self.threshold
 		labeled_array, num_features = scipy.ndimage.measurements.label(mask)
 
-		segments: Sequence[HighIntensity] = []
+		segments: Sequence[HighDensity] = []
 		for i in range(1, num_features + 1):
 			indices = np.where(labeled_array == i)[0]
 			if len(indices) == 0:
@@ -123,7 +123,7 @@ class IntensityAnalyzer:
 			peak_time = times[peak_idx]
 			peak_value = values[peak_idx]
 
-			peak = HighIntensity(
+			peak = HighDensity(
 				highest_time=peak_time,
 				highest_value=peak_value,
 				start_sec=times[start_idx],
@@ -186,6 +186,6 @@ class IntensityAnalyzer:
 		for label, group in df.groupby('label'):
 			time = group['time'].tolist()
 			value = group['value'].tolist()
-			analyzer = IntensityAnalyzer(time, value, smooth_size=50, threshold=30)
+			analyzer = DensityAnalyzer(time, value, smooth_size=50, threshold=30)
 			df = analyzer.save(output_path=os.path.join(peaks_raw_dir, f'{label}.csv'), label=label)
 			analyzer.plot(show=False, save_path=os.path.join(peaks_fig_dir, f'{label}.png'))

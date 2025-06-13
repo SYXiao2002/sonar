@@ -227,9 +227,12 @@ class DatasetLoader:
 		return dataset
 	
 
-def get_dataset(ds_dir, load_cache):
+def get_dataset(ds_dir, load_cache, marker_file=None):
 	hbo_dir = os.path.join(ds_dir, 'hbo')
-	marker_file = os.path.join(ds_dir, 'marker', 'marker.csv')
+	if marker_file is None:
+		marker_file = os.path.join(ds_dir, 'marker', 'marker.csv')
+	else:
+		marker_file = os.path.join(marker_file)
 
 	hbo_file_l = [
 		os.path.join(hbo_dir, f) for f in os.listdir(hbo_dir) if f.endswith('.csv')
