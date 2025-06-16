@@ -7,7 +7,6 @@ from mne.preprocessing.nirs import (
 )
 import pandas as pd
 from sonar.preprocess.fix_snirf import check_or_create_landmark_labels
-from sonar.preprocess.normalization import hbo_normalize
 from sonar.preprocess.snirf_metadata import get_snirf_metadata
 
 

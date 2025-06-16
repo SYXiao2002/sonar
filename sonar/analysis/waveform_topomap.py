@@ -27,14 +27,14 @@ class WaveformTopomap:
 
 	def _cal(self):
 		ch_pos_l, _ = get_meta_data(self.metadata_path)
-		self.inset_width = 0.06
-		self.inset_height = 0.08
-		self.ch_pos_l = normalize_positions(ch_pos_l, self.inset_width, self.inset_height)
+		self.inset_width = 0.078
+		self.inset_height = 0.12
+		self.ch_pos_l = normalize_positions(ch_pos_l, self.inset_width, self.inset_height, x_range=(0.001, 0.999), y_range=(0.02, 0.95))
 
 		pass
 
-	def plot(self, sub_label_l, suptitle=None):
-		fig = plt.figure(figsize=(12, 8))
+	def plot(self, sub_label_l, suptitle=None, expand=0):
+		fig = plt.figure(figsize=(28, 12))
 		main_ax = fig.add_subplot(111)
 		main_ax.axis('off')
 
@@ -50,18 +50,16 @@ class WaveformTopomap:
 				lines.append(line)
 
 			# ax_inset.set_ylim(-1, 1)
-			ax_inset.set_ylim(-5, 5)
+			ax_inset.set_ylim(-3, 3)
+			ax_inset.grid(True)
 			ax_inset.tick_params(axis='both', labelsize=6, direction='in')
 			ax_inset.set_title(f'Ch{ch_idx+1}', fontsize=7, pad=2)
 
-			xticks = ax_inset.get_xticks()
-			xticks = np.arange(self.region_selector.start_sec-10, self.region_selector.end_sec + 10 + 1, 5).astype(int)
-			# round xticks
-			xticks = np.round(xticks, 0)
+			xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=4)
 			ax_inset.set_xticks(xticks)
 			ax_inset.set_xticklabels(xticks, rotation=45)  # Rotate 45 degrees
 
-			ax_inset.set_xlim(self.region_selector.get_xlim_range()[0] - 10, self.region_selector.get_xlim_range()[1] + 10)
+			ax_inset.set_xlim(self.region_selector.get_xlim_range()[0] - expand, self.region_selector.get_xlim_range()[1] + expand)
 			plt.axvspan(self.region_selector.start_sec, self.region_selector.end_sec, color='orange', alpha=0.2)
 
 			# Add legend only to selected channels to avoid visual clutter
