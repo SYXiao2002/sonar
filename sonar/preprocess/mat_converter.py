@@ -5,12 +5,14 @@ Date: 2025-05-26
 Purpose: converter for .mat format from ZYC
 """
 import os
-from re import sub
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 
-def mat_converter(mat_path, sub_label_l, time_shifting=0):
+from sonar.core.region_selector import RegionSelector
+from sonar.preprocess.normalization import z_score_normalization
+
+def mat_converter(mat_path, sub_label_l, time_shifting=0, crop_dict=None):
 	# Load .mat file
 	data = loadmat(mat_path)
 	homer_data = data['Homer_Data'][0]
@@ -19,15 +21,16 @@ def mat_converter(mat_path, sub_label_l, time_shifting=0):
 
 	# Get parent directory of the .mat file
 	parent_dir = os.path.dirname(mat_path)
-	output_dir = os.path.join(parent_dir, 'hbo')
-	os.makedirs(output_dir, exist_ok=True)
+	hbo_raw_dir = os.path.join(parent_dir, 'hbo_raw')
+	hbo_normalized_dir = os.path.join(parent_dir, 'hbo')
 
-	# Create hbo/ folder if not exists
-	os.makedirs(output_dir, exist_ok=True)
+	os.makedirs(hbo_raw_dir, exist_ok=True)
+	os.makedirs(hbo_normalized_dir, exist_ok=True)
 
 	for sub_idx, sub_label in enumerate(sub_label_l):
 		if sub_label is None:
 			continue
+		region_selector: RegionSelector = crop_dict[sub_label]
 		subject_data = homer_data[sub_idx][0]
 		time = subject_data[0]  # shape: (T,)
 		hbo = subject_data[1]  # shape: (T, 48)
@@ -41,15 +44,22 @@ def mat_converter(mat_path, sub_label_l, time_shifting=0):
 
 		# Save to CSV
 		df = pd.DataFrame(hbo_with_time, columns=col_names)
-		output_path = os.path.join(output_dir, f'{sub_label}.csv')
+		output_path = os.path.join(hbo_raw_dir, f'{sub_label}.csv')
 
 		df['time'] = df['time'] + time_shifting
 
-		# Save back to CSV (optional)
-		df.to_csv(output_path, index=False)
+		for col in df.columns:
+			if col != "time":  # Skip the "time" column
+				# 原始单位为mmol/L
+				df[col] *= 1e-3  # Multiply by 1e-3, 单位变成mol/L
+
+		# crop 
+		df_crop = df[(df["time"] >= region_selector.start_sec) & (df["time"] <= region_selector.end_sec)]
+		df_crop.to_csv(output_path, index=False)
 
 		print(f"Saved: {output_path}")
 
+	z_score_normalization(src_dir=hbo_raw_dir, tar_dir=hbo_normalized_dir)
 
 if __name__ == '__main__':
 	mat_path = 'res/trainingcamp-homer3/homerdata.mat'
@@ -65,4 +75,12 @@ if __name__ == '__main__':
 		'HC9',
 		'HC7',
 	]
-	mat_converter(mat_path, sub_label_l=sub_dict)
+	crop_dict = {}
+	crop_dict['HC1']=RegionSelector(start_sec=2055.455, end_sec=4817.909)
+	crop_dict['HC3']=RegionSelector(start_sec=2052.727, end_sec=4815.000)
+	crop_dict['HC5']=RegionSelector(start_sec=2061.727, end_sec=4824.091)
+	crop_dict['HC7']=RegionSelector(start_sec=95.182, end_sec=2857.727)
+	crop_dict['HC9']=RegionSelector(start_sec=117.273, end_sec=2879.727)
+
+	
+	mat_converter(mat_path, sub_label_l=sub_dict, crop_dict=crop_dict)

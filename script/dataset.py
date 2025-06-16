@@ -4,6 +4,7 @@ Author: Yixiao Shen
 Date: 2025-05-19
 Purpose: 
 """
+from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.mat_converter import mat_converter
 from sonar.preprocess.mne_converter import process_dataset
 from sonar.preprocess.nirspark_converter import nirspark2csv
@@ -17,7 +18,7 @@ if __name__ == "__main__":
 	ds_dir = 'res/trainingcamp-nirspark'
 	sr = 11
 	time_shifting = 2222.354
-	nirspark2csv(ds_dir, sr, time_shifting)
+	# nirspark2csv(ds_dir, sr, time_shifting)
 
 	# mne
 	debug_filter_param_list=[
@@ -50,4 +51,10 @@ if __name__ == "__main__":
 		'HC9',
 		'HC7',
 	]
-	# mat_converter('res/trainingcamp-homer3/homerdata.mat', time_shifting=time_shifting, sub_label_l=sub_label_l)
+	crop_dict = {}
+	crop_dict['HC1']=RegionSelector(start_sec=2055.455, end_sec=4817.909)
+	crop_dict['HC3']=RegionSelector(start_sec=2052.727, end_sec=4815.000)
+	crop_dict['HC5']=RegionSelector(start_sec=2061.727, end_sec=4824.091)
+	crop_dict['HC7']=RegionSelector(start_sec=95.182, end_sec=2857.727)
+	crop_dict['HC9']=RegionSelector(start_sec=117.273, end_sec=2879.727)
+	mat_converter('res/trainingcamp-homer3/homerdata.mat', time_shifting=0, sub_label_l=sub_label_l, crop_dict=crop_dict)
