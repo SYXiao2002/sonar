@@ -13,8 +13,9 @@ from matplotlib import pyplot as plt
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
+import seaborn as sns
 
-color_pool = plt.rcParams['axes.prop_cycle'].by_key()['color']
+color_pool = sns.color_palette("tab20")  # 或 "Set2", "Paired", "husl", "dark", "colorblind"
 num_colors = len(color_pool)
 
 def get_color_from_label(label):
@@ -39,7 +40,7 @@ class WaveformTopomap:
 
 		pass
 
-	def plot(self, sub_label_l, suptitle=None, expand=0, annotation=None, ylim=(-2, 2)):
+	def plot(self, sub_label_l, use_raw, suptitle=None, expand=0, annotation=None):
 		fig = plt.figure(figsize=(12, 10))
 		main_ax = fig.add_subplot(111)
 		main_ax.axis('off')
@@ -54,7 +55,7 @@ class WaveformTopomap:
 				color=get_color_from_label(sub_label)
 				ax_inset.plot(self.dataset['time'], self.dataset[sub_label][ch_idx], label=sub_label, color=color, linewidth=0.7, zorder=3)
 
-			ax_inset.set_ylim(ylim)
+			ax_inset.set_ylim(-3, 3)
 			ax_inset.grid(True)
 			ax_inset.tick_params(axis='both', labelsize=6, direction='in')
 			ax_inset.set_title(f'Ch{ch_idx+1}', fontsize=7, pad=2)
@@ -104,6 +105,11 @@ class WaveformTopomap:
 
 			if ch_idx + 1 not in {38, 20, 18, 2, 1}:
 				ax_inset.set_yticklabels([])
+			else:
+				if use_raw:
+					ax_inset.set_ylabel('HbO (uM)')
+				else:
+					ax_inset.set_ylabel('HbO (a.u.)')
 
 		plot_anatomical_labels(plt)
 		if suptitle is not None:

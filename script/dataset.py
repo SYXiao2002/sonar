@@ -18,7 +18,7 @@ if __name__ == "__main__":
 	ds_dir = 'res/trainingcamp-nirspark'
 	sr = 11
 	time_shifting = 2222.354
-	# nirspark2csv(ds_dir, sr, time_shifting)
+	nirspark2csv(ds_dir, sr, time_shifting)
 
 	# mne
 	debug_filter_param_list=[
@@ -31,7 +31,7 @@ if __name__ == "__main__":
 		# (0.007, 0.1, 0.001, 2.0),
 	]
 	# process_trainingcamp(ds_dir='res/trainingcamp-mne-may',filter_param_list=[(0.007, 0.04, 0.001, 0.03)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
-	# process_trainingcamp(ds_dir='res/trainingcamp-mne-april',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19, z_score=True)
+	process_trainingcamp(ds_dir='res/trainingcamp-mne-april',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19, z_score=True)
 	# process_trainingcamp(ds_dir='res/trainingcamp-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
 	# process_trainingcamp(ds_dir='res/yuanqu-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
 	# process_trainingcamp(ds_dir='res/yuanqu-mne',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)

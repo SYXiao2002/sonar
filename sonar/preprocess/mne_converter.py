@@ -7,6 +7,7 @@ from mne.preprocessing.nirs import (
 )
 import pandas as pd
 from sonar.preprocess.fix_snirf import check_or_create_landmark_labels
+from sonar.preprocess.normalization import z_score_normalization
 from sonar.preprocess.snirf_metadata import get_snirf_metadata
 
 
@@ -96,9 +97,9 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 
 	# find all snirf files in the dir/snirf
 	hbo_normalized_dir = os.path.join(ds_dir, 'hbo')
-	hbp_raw_dir = os.path.join(ds_dir, 'hbo_raw')
+	hbo_raw_dir = os.path.join(ds_dir, 'hbo_raw')
 	os.makedirs(hbo_normalized_dir, exist_ok=True)
-	os.makedirs(hbp_raw_dir, exist_ok=True)
+	os.makedirs(hbo_raw_dir, exist_ok=True)
 
 	
 	snirf_dir = os.path.join(ds_dir, 'snirf')
@@ -139,23 +140,13 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 		
 		# Determine the folder and base name of the file
 		base_name = os.path.splitext(os.path.basename(f))[0]
-		hbo_path = os.path.join(hbp_raw_dir, f'{base_name}.csv')
-		df.to_csv(hbo_path, index=False)
-		
-		# # Check if the corresponding csv file exists, if so, return immediately
-		# if os.path.exists(hbo_path) and not override:
-		# 	print(f'{hbo_path} already exists, skipping further processing.')
-		# 	return
+		hbo_path = os.path.join(hbo_raw_dir, f'{base_name}.csv')
 
-		# apply z-score normalization
-		if z_score:
-			for col in df.columns:
-				if col == 'time':
-					continue
-				mean = df[col].mean()
-				std = df[col].std()
-				df[col] = (df[col] - mean) / std
-		
-		hbo_path = os.path.join(hbo_normalized_dir, f'{base_name}.csv')
+		for col in df.columns:
+			if col != "time":  # Skip the "time" column
+				# 原始单位为mol/L
+				df[col] *= 1e6  # Multiply by 1e6，单位变成umol/L
+
 		df.to_csv(hbo_path, index=False)
-		print(f'Duration Final: {hbo.times[-1] - hbo.times[0]}')
+
+	z_score_normalization(src_dir=hbo_raw_dir, tar_dir=hbo_normalized_dir)

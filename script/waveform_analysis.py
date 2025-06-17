@@ -1,7 +1,6 @@
 import os
 from typing import Sequence
 
-from matplotlib.pyplot import ylim
 from sonar.analysis.waveform_topomap import WaveformTopomap
 from sonar.core import region_selector
 from sonar.core.dataset_loader import get_dataset
@@ -9,7 +8,7 @@ from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.sv_marker import Annotation, read_annotations
 
 
-def run(ds_dir, use_raw, ylim):
+def run(ds_dir, use_raw):
 	ds, _ = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True, use_raw=use_raw)
 	metadata_path = 'res/test/snirf_metadata.csv'
 
@@ -38,10 +37,11 @@ def run(ds_dir, use_raw, ylim):
 	# sub_label_l = ['homer3']
 	for a in roi_annotation:
 		region_selector = RegionSelector(start_sec=a.start, length_sec=a.duration)
-		waveform_topomap = WaveformTopomap(ds, region_selector, metadata_path, os.path.join('out', ds_dir, 'fig_waveform', a.label))
-		waveform_topomap.plot(sub_label_l, suptitle=f'Waveform Topomap: HC1 ( length = {a.duration:.0f} sec )', annotation=topomap_annotation, ylim=ylim)
+		raw_marker = 'raw' if use_raw  else 'z'
+		waveform_topomap = WaveformTopomap(ds, region_selector, metadata_path, os.path.join('out', ds_dir, 'fig_waveform', f'{a.label}_{raw_marker}'))
+		waveform_topomap.plot(sub_label_l, use_raw=use_raw, suptitle=f'Waveform Topomap: HC1 {raw_marker}( length = {a.duration:.0f} sec )', annotation=topomap_annotation)
 
 if __name__ == '__main__':
 	# run(ds_dir='trainingcamp-nirspark', use_raw=False)
-	# run(ds_dir='trainingcamp-mne-nirspark-homer3', use_raw=True, ylim=(-2*1e-6, 2*1e-6))
-	run(ds_dir='trainingcamp-mne-nirspark-homer3', use_raw=False, ylim=(-2, 2))
+	run(ds_dir='trainingcamp-mne-nirspark-homer3', use_raw=True)
+	run(ds_dir='trainingcamp-mne-nirspark-homer3', use_raw=False)
