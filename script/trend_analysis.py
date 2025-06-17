@@ -84,6 +84,14 @@ if __name__ == "__main__":
 			RegionSelector(start_sec=4027, length_sec=363),
 			RegionSelector(start_sec=4763, length_sec=221),
 	])
+	run(ds_dir='trainingcamp-homer3', load_cache=False, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram', 
+	 	marker_file='res/trainingcamp-mne-april/marker/mild&intense.csv',
+		region_selector_l=[
+			RegionSelector(start_sec=2222, length_sec=585), 
+			RegionSelector(start_sec=3487, length_sec=377),
+			RegionSelector(start_sec=4027, length_sec=363),
+			RegionSelector(start_sec=4763, length_sec=221),
+	])
 	# run(ds_dir='test', load_cache=True)
 	# run(ds_dir='wh_test', load_cache=False)
 	# run(ds_dir='trainingcamp-pure', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
