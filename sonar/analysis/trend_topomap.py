@@ -10,6 +10,7 @@ from functools import lru_cache
 import hashlib
 import os
 import matplotlib
+from matplotlib import axes
 from matplotlib.pylab import f
 import pandas as pd
 from tqdm import tqdm
@@ -36,6 +37,8 @@ matplotlib.use('Agg')
 class Density:
 	time: float	# Center time of the window
 	ch_count: int	# Total trend count in this window
+	height_mean: Optional[float] = None	# Average height of the trend
+	height_std: Optional[float] = None
 
 
 class TrendTopomap():
@@ -257,7 +260,7 @@ class TrendTopomap():
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				density_analyzer = DensityAnalyzer(x_vals, y_vals, smooth_size=30, threshold=thr, max_value=self.max_value)
+				density_analyzer = DensityAnalyzer(x_vals, y_vals, smooth_size=20, threshold=thr, max_value=self.max_value)
 
 				self._computed_high_density[sub_idx] = density_analyzer
 
@@ -271,11 +274,11 @@ class TrendTopomap():
 			csv_path = os.path.join(density_csv_dir, f"{label}.csv")
 			HighDensity.save_sequence_to_csv(density_analyser.segments, csv_path)
 
-	def plot_trends(self, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
+	def plot_trends(self, metadata_path, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
 		if sub_idx is None:
 			sub_idx_l = range(len(self.dataset.label_l))
 			for sub_idx in sub_idx_l:
-				self.plot_trends(sub_idx=sub_idx, out_folder=out_folder, dpi=dpi, return_fig=False)
+				self.plot_trends(sub_idx=sub_idx, out_folder=out_folder, dpi=dpi, return_fig=False, metadata_path=metadata_path)
 			return
 
 		trends_fig_dir = os.path.join(self.output_dir, out_folder)
@@ -284,12 +287,12 @@ class TrendTopomap():
 		data = np.array(self.dataset[sub_idx])
 		n_channels, n_times = data.shape
 
-		n_subplot =4
+		n_subplot = 4
 		max=10
 		ratios = [max, 1, 2, 1]
 		if self.heartrate_dir is None:
 			n_subplot-=1
-			ratios = [max, 2, 1]
+			ratios = [max, 1 ,2]
 
 
 		fig, axs = plt.subplots(
@@ -301,15 +304,16 @@ class TrendTopomap():
 		)
 		fig.subplots_adjust(left=0.1)
 
-		df = pd.read_csv('res/test/snirf_metadata.csv')
+		df = pd.read_csv(metadata_path)
 		idx2y, mapped_df = map_channel_idx_to_y_axis(df)
 		inv_dict = {v: k for k, v in idx2y.items()}
 
 		# --- ax1: Trend Segments ---
-		axs[0].set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
-		axs[0].set_yticklabels([])
-		axs[0].set_yticks([])
-		axs[0].set_ylim(-0.5, n_channels-0.5)
+		ax=axs[0]
+		ax.set_title(f"Monotonic Trend Segments: {sub_label}\nmode={self.mode}, min_duration = {self.min_duration:.1f}s")
+		ax.set_yticklabels([])
+		ax.set_yticks([])
+		ax.set_ylim(-0.5, n_channels-0.5)
 
 		def pre_frontal_sd_category(ax, width=-0.05):
 			annotate_yrange(0, 22, 'Left Hemisphere', offset=width, width=width, text_kwargs={'rotation': 'vertical'}, ax=ax)
@@ -336,14 +340,15 @@ class TrendTopomap():
 
 			ax.set_yticks([i for i in range(0, n_channels, 1)])
 			ax.set_yticklabels([f'ch{inv_dict[i]}' for i in range(0, n_channels, 1)], fontsize=7)
-				   
-		pre_frontal_sd_category(ax=axs[0])
+
 
 		# --- optimized trend drawing ---
 		sub_trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
 		lines_xmin, lines_xmax, lines_y = [], [], []
 		centers_x, centers_y, center_sizes = [], [], []
-
+				   
+		if len(sub_trends) == 48:
+			pre_frontal_sd_category(ax=axs[0])
 		for ch_idx, ch_trends in enumerate(sub_trends):
 			for trend in ch_trends:
 				if not (self.region_selector.start_sec <= trend.center_sec <= self.region_selector.end_sec):
@@ -358,19 +363,20 @@ class TrendTopomap():
 				center_sizes.append(trend.height)
 
 		# Draw all trend segments together
-		axs[0].hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='gray', linewidth=1, zorder=2, alpha=0.4)
+		ax.hlines(y=lines_y, xmin=lines_xmin, xmax=lines_xmax, colors='gray', linewidth=1, zorder=2, alpha=0.4)
 
 		if centers_x:
 			center_sizes = normalize_to_range(center_sizes, min_val=0.1, max_val=15)
-			axs[0].scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
+			ax.scatter(centers_x, centers_y, s=center_sizes, color='red', zorder=3)
 
 		# --- ax2: Annotations ---
-		axs[1].set_ylabel("Event")
-		axs[1].set_yticks([])
-		axs[1].set_ylim(0, 1)
+		ax=axs[1]
+		ax.set_ylabel("Event")
+		ax.set_yticks([])
+		ax.set_ylim(0, 1)
 		xticks = self.region_selector.get_integer_ticks(ideal_num_ticks=10)
-		axs[1].set_xticks(xticks)
-		axs[1].set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
+		ax.set_xticks(xticks)
+		ax.set_xticklabels([f"{t:.0f}" for t in xticks], fontsize=8)
 
 		label_colors = {}
 
@@ -388,12 +394,17 @@ class TrendTopomap():
 			event_spans[a.label].append((a.start, a.duration))
 
 		for label, spans in event_spans.items():
-			axs[1].broken_barh(spans, (0, 1), facecolors=label_colors[label], alpha=0.5, label=label)
+			ax.broken_barh(spans, (0, 1), facecolors=label_colors[label], alpha=0.5, label=label)
 
-		axs[1].legend(loc='upper right', fontsize=8)
-
+		ax.legend(
+			bbox_to_anchor=(1.0001, 1),  # (x, y) 坐标，1.02 表示稍微超出右边界，1 表示顶部对齐
+			loc="upper left",          # 图例的锚点位置（相对于 bbox_to_anchor）
+			fontsize=8,
+			borderaxespad=0.           # 图例与轴边界的间距
+		)
 		# --- ax3: Density Plot ---
-		axs[2].set_ylabel(f"Density\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
+		ax=axs[2]
+		ax.set_ylabel(f"Density\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
 
 		density = self._computed_density.get(sub_idx, {})
 		if density:
@@ -404,7 +415,7 @@ class TrendTopomap():
 			analyzer: DensityAnalyzer = self._computed_high_density.get(sub_idx, {})
 			thr = analyzer.threshold
 
-			axs[2].hlines(
+			ax.hlines(
 				y=thr,
 				xmin=self.region_selector.start_sec,
 				xmax=self.region_selector.end_sec,
@@ -415,7 +426,7 @@ class TrendTopomap():
 			)
 
 			if self.max_value is not None:
-				axs[2].hlines(
+				ax.hlines(
 					y=self.max_value,
 					xmin=self.region_selector.start_sec,
 					xmax=self.region_selector.end_sec,
@@ -425,8 +436,8 @@ class TrendTopomap():
 					linewidth=1
 				)
 
-			axs[2].plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
-			axs[2].plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
+			ax.plot(x_vals, y_vals, label='original', color='blue', linewidth=1.5)
+			ax.plot(analyzer.times, analyzer.smoothed, label='smoothed', color='black', linewidth=1.5, alpha=0.3)
 
 			# Vectorized mask creation
 			if analyzer.segments:
@@ -434,20 +445,25 @@ class TrendTopomap():
 				mask = np.logical_or.reduce([
 					(analyzer.times >= start) & (analyzer.times <= end) for start, end in segments
 				])
-				axs[2].plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
+				ax.plot(analyzer.times[mask], analyzer.smoothed[mask], 'ro', markersize=2)
 
-			axs[2].legend(
+			ax.legend(
 				bbox_to_anchor=(1.0001, 1),  # (x, y) 坐标，1.02 表示稍微超出右边界，1 表示顶部对齐
 				loc="upper left",          # 图例的锚点位置（相对于 bbox_to_anchor）
 				borderaxespad=0.           # 图例与轴边界的间距
 			)
+		# --- ax4: Trend Height ---
+		# ax=axs[3]
+		# ax.set_ylabel(f"MTS\nHeight(uM)")
 
+		# 计算每一个MTS/High Density中参与的channel trend, 计算其trend.height平均值, 横坐标为MTS.center_sec
 
-		# --- ax4: Heart Rate ---
+		# --- ax5: Heart Rate ---
 		if self.heartrate_dir is not None:
-			axs[3].set_ylabel("HR\n(Hz)")
-			axs[3].plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
-			axs[3].set_ylim(1, 1.5)
+			ax=axs[-1]
+			ax.set_ylabel("HR\n(Hz)")
+			ax.plot(self._heart_rate[sub_idx][0], self._heart_rate[sub_idx][1], color='black', linewidth=1.5)
+			ax.set_ylim(1, 1.5)
 
 		# --- Shared x limits ---
 		for ax in axs:

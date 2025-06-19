@@ -18,7 +18,7 @@ if __name__ == "__main__":
 	ds_dir = 'res/trainingcamp-nirspark'
 	sr = 11
 	time_shifting = 2222.354
-	nirspark2csv(ds_dir, sr, time_shifting)
+	# nirspark2csv(ds_dir, sr, time_shifting)
 
 	# mne
 	debug_filter_param_list=[
@@ -31,8 +31,11 @@ if __name__ == "__main__":
 		# (0.007, 0.1, 0.001, 2.0),
 	]
 	# process_trainingcamp(ds_dir='res/trainingcamp-mne-may',filter_param_list=[(0.007, 0.04, 0.001, 0.03)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
-	process_trainingcamp(ds_dir='res/trainingcamp-mne-april',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19, z_score=True)
-	# process_trainingcamp(ds_dir='res/trainingcamp-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
+	# process_trainingcamp(ds_dir='res/trainingcamp-mne-april',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19, z_score=True)
+	# process_trainingcamp(ds_dir='res/trainingcamp-mne-luke',filter_param_list=[(0.05, 0.7, 0.02, 0.2)],  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19, z_score=True)
+	# process_trainingcamp(ds_dir='res/tapping-luke',filter_param_list=[(0.05, 0.7, 0.02, 0.2)],  debug=False, time_shifting=0, first_trigger=None, last_trigger=None, z_score=True)
+	# process_trainingcamp(ds_dir='res/tapping-luke-april',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=None, last_trigger=None, z_score=True)
+	process_trainingcamp(ds_dir='res/trainingcamp-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
 	# process_trainingcamp(ds_dir='res/yuanqu-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
 	# process_trainingcamp(ds_dir='res/yuanqu-mne',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
 
@@ -57,4 +60,4 @@ if __name__ == "__main__":
 	crop_dict['HC5']=RegionSelector(start_sec=2061.727, end_sec=4824.091)
 	crop_dict['HC7']=RegionSelector(start_sec=95.182, end_sec=2857.727)
 	crop_dict['HC9']=RegionSelector(start_sec=117.273, end_sec=2879.727)
-	mat_converter('res/trainingcamp-homer3/homerdata.mat', time_shifting=0, sub_label_l=sub_label_l, crop_dict=crop_dict)
+	# mat_converter('res/trainingcamp-homer3/homerdata.mat', time_shifting=0, sub_label_l=sub_label_l, crop_dict=crop_dict)

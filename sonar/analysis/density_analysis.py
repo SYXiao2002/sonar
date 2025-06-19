@@ -34,7 +34,7 @@ class HighDensity(RegionSelector):
 	@classmethod
 	def save_sequence_to_csv(cls, peaks: Sequence["HighDensity"], path: str):
 		if not peaks:
-			raise ValueError("Empty peak list.")
+			return Warning("Empty peak list.")
 
 		num_channels = len(peaks[0].channel_status)
 		channel_names = [f"ch{i+1}" for i in range(num_channels)]

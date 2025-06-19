@@ -111,25 +111,27 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 		get_snirf_metadata(f)
 
 		# Define the roi here!!!
-		start_time, _ = get_trigger_times(raw, first_trigger) 
-		_, end_time = get_trigger_times(raw, last_trigger)
+		if first_trigger is not None and last_trigger is not None:
+			start_time, _ = get_trigger_times(raw, first_trigger) 
+			_, end_time = get_trigger_times(raw, last_trigger)
 
-		# Calculate the expanded cropping range
-		tmin_expand = max(0, start_time - thr)
-		head_cutting = min(thr, start_time - 0)
+			# Calculate the expanded cropping range
+			tmin_expand = max(0, start_time - thr)
+			head_cutting = min(thr, start_time - 0)
 
-		tmax_expand = min(end_time + thr, raw.times[-1])
-		tail_cutting = min(thr, raw.times[-1] - end_time)
+			tmax_expand = min(end_time + thr, raw.times[-1])
+			tail_cutting = min(thr, raw.times[-1] - end_time)
 
-		print(f'Duration RAW: {raw.times[-1] - raw.times[0]}')
-		raw = crop_data(raw, tmin_expand, tmax_expand)
+			print(f'Duration RAW: {raw.times[-1] - raw.times[0]}')
+			raw = crop_data(raw, tmin_expand, tmax_expand)
 		print(f'Duration Selected: {raw.times[-1] - raw.times[0]}')
 
 		# Convert to HbO/HbR
 		hbo = convert2hbo(raw, filter_param_list=filter_param_list, debug=debug)
 
-		# Crop data
-		hbo = crop_data(hbo, head_cutting, hbo.times[-1] - tail_cutting)
+		if first_trigger is not None and last_trigger is not None:
+			# Crop data
+			hbo = crop_data(hbo, head_cutting, hbo.times[-1] - tail_cutting)
 
 		# Only keep HbO channels
 		hbo.pick_channels([ch for ch in hbo.ch_names if 'hbo' in ch])

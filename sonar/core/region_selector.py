@@ -8,6 +8,8 @@ Purpose: Define temporal region selection and cropping utilities for time series
 import numpy as np
 from typing import Sequence, Tuple, Optional, Union
 
+import pandas as pd
+
 
 class RegionSelector:
 	def __init__(
@@ -117,4 +119,15 @@ class RegionSelector:
 			ticks.append(ticks[-1] + step)
 
 		return ticks
-
+	
+	@staticmethod
+	def load_from_csv(csv_path): 
+		df = pd.read_csv(csv_path)
+		region_l = []
+		for _, row in df.iterrows():
+			region = RegionSelector(
+				length_sec=row['length_sec'],
+				start_sec=row['start_sec'],
+			)
+			region_l.append(region)
+		return region_l

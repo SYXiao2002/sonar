@@ -56,7 +56,7 @@ class TrendDetector(AnalysisContext):
 				start_time = time[start_idx]
 				end_time = time[i - 1]
 				if end_time - start_time >= min_duration:
-					height = data[start_idx] - data[i-1]
+					height = data[i-1] - data[start_idx]
 					trends.append(Trend(start_sec=start_time, end_sec=end_time, height=height))
 				start_idx = None
 
