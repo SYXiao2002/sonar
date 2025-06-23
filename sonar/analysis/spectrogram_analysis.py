@@ -27,7 +27,8 @@ class SpectrogramProcessor:
 		self.fs = fs
 		self.n_channels = len(dataset[0])
 		self.nperseg = nperseg or int(fs * 10)
-		self.noverlap = noverlap or int(self.nperseg * 0.95)
+		# self.noverlap = noverlap or int(self.nperseg * 0.95)
+		self.noverlap = noverlap or int(self.nperseg ) - 1
 		self.nfft = nfft
 		self.out_dir = out_dir
 

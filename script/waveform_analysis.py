@@ -1,6 +1,8 @@
 import os
 from typing import Sequence
 
+from matplotlib import use
+
 from sonar.analysis.waveform_topomap import WaveformTopomap
 from sonar.core import region_selector
 from sonar.core.dataset_loader import get_dataset
@@ -79,13 +81,14 @@ def run(ds_dir, use_raw):
 
 def main(ds_dir, use_raw):
 	ds, _ = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=False)
-	region_selector = RegionSelector(start_sec=2222, length_sec=850)
+	region_selector = RegionSelector(start_sec=0, length_sec=500)
 	waveform_topomap = WaveformTopomap(ds, region_selector, metadata_path=os.path.join('res', ds_dir, 'snirf', 'snirf_metadata.csv'), output_dir=os.path.join('out', ds_dir))
-	waveform_topomap.plot(['HC1'], use_raw=use_raw, suptitle=f'Waveform Topomap: HC1 ( length = {region_selector.length_sec:.0f} sec )')
+	waveform_topomap.plot(['Sub5'], use_raw=use_raw, suptitle=f'Waveform Topomap: Sub5, Cortivision ( length = {region_selector.length_sec:.0f} sec )')
 
 if __name__ == '__main__':
 	# main(ds_dir='trainingcamp-mne-no-filter', use_raw=True)
 	# run(ds_dir='trainingcamp-nirspark', use_raw=False)
 	# run(ds_dir='trainingcamp-homer3', use_raw=False)
-	run(ds_dir='tapping-luke-april', use_raw=True)
+	# run(ds_dir='tapping-luke-april', use_raw=True)
 	# run(ds_dir='trainingcamp-mne-april', use_raw=True)
+	main(ds_dir='yuanqu-mne-cortivision', use_raw=True)
