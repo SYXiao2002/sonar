@@ -38,6 +38,8 @@ if __name__ == "__main__":
 	# process_trainingcamp(ds_dir='res/trainingcamp-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=time_shifting, first_trigger=9, last_trigger=19)
 	# process_trainingcamp(ds_dir='res/yuanqu-mne-no-filter',filter_param_list=None,  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
 	process_trainingcamp(ds_dir='res/yuanqu-mne-cortivision',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
+	process_trainingcamp(ds_dir='res/yuanqu-mne',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=9, last_trigger=9)
+	# process_trainingcamp(ds_dir='res/tapping0623',filter_param_list=[(0.02, 0.09, 0.01, 0.1)],  debug=False, time_shifting=0, first_trigger=1, last_trigger=None)
 
 
 

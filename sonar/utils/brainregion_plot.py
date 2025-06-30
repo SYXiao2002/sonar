@@ -189,19 +189,18 @@ def plot_brain_region_labels(fig, ch_pos_l, region_dict, box_width, box_height, 
 			ax_inset.text(0.5, 0.5, "No data", fontsize=fontsize, va='center', ha='center')
 	
 
-def topomap_brain_region(region_csv_path, br_thr=15, debug=False):
+def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.07, box_height = 0.10):
 	fig = plt.figure(figsize=(12, 8))
 	main_ax = fig.add_subplot(111)
 	main_ax.axis('off')
 
-	box_width = 0.07
-	box_height = 0.10
+	# 
+	dir_path = os.path.dirname(region_csv_path)
 
-	metadata_path = "res/test/snirf_metadata.csv"
+	metadata_path = os.path.join(dir_path, 'snirf_metadata.csv')
 	ch_pos_l, ch_name_l = get_meta_data(metadata_path)
 	ch_pos_l = normalize_positions(ch_pos_l, box_width, box_height)
 
-	dir_path = os.path.dirname(region_csv_path)
 	region_dict, region_column_name = parse_region_csv(region_csv_path)
 
 	plot_brain_region_labels(
@@ -221,13 +220,12 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False):
 		plt.savefig(os.path.join(dir_path, f"{region_column_name}.png"), dpi = 1200)
 
 if __name__ == "__main__":
-	region_csv_l = [
-		# 'res/sd/AAL.csv',
-		'res/brain-region-sd/Brodmann(MRIcro).csv',
-		# 'res/sd/LPBA40.csv',
-		# 'res/sd/Talairach.csv',
-	]
-	debug=True
+	# region_csv_l = [
+	# 	'res/brain-region-sd/PFC/Brodmann(MRIcro).csv',
+	# ]
+	debug=False
 
-	for region_csv in region_csv_l:
-		topomap_brain_region(region_csv, debug=debug)
+	# for region_csv in region_csv_l:
+	# 	topomap_brain_region(region_csv, debug=debug)
+
+	topomap_brain_region('res/brain-region-sd/PFC+MOTOR/PFC+MOTOR_MRIcro.csv', debug=debug, box_width = 0.05, box_height = 0.07)

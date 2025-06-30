@@ -11,7 +11,7 @@ from sonar.core.window_selector import WindowSelector
 def run(ds_dir='test', load_cache='False', heartrate_dir=None, region_selector_l=None, marker_file=None, high_density_thr=30):
 	ds, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=load_cache, marker_file=marker_file)
  
-	intensity_window_selector = WindowSelector(window_size=1, step=0.2)
+	intensity_window_selector = WindowSelector(window_size=1, step=0.3)
 
 
 	if region_selector_l is None:
@@ -66,7 +66,10 @@ if __name__ == "__main__":
 	# run(ds_dir='test', load_cache=True)
 	# run(ds_dir='wh_test', load_cache=False)
 	# run(ds_dir='trainingcamp-pure', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram')
-	run(ds_dir='yuanqu-mne-cortivision', load_cache=True, heartrate_dir='res/yuanqu-mne-no-filter/spectrogram', region_selector_l=[
+	run(ds_dir='yuanqu-mne-cortivision', load_cache=False, heartrate_dir=None, region_selector_l=[
+		RegionSelector(start_sec=0, length_sec=500)
+	], high_density_thr=20)
+	run(ds_dir='yuanqu-mne', load_cache=False, heartrate_dir=None, region_selector_l=[
 		RegionSelector(start_sec=0, length_sec=500)
 	])
 	# run(ds_dir='trainingcamp-mne-april', load_cache=True, heartrate_dir='res/trainingcamp-mne-no-filter/spectrogram', region_selector_l=[
