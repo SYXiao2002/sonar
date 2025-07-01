@@ -104,11 +104,10 @@ def process_dataset(ds_dir, time_shifting, first_trigger, last_trigger, filter_p
 	
 	snirf_dir = os.path.join(ds_dir, 'snirf')
 	snirf_file_l = [os.path.join(snirf_dir, f) for f in os.listdir(snirf_dir) if f.endswith('.snirf')]
+	get_snirf_metadata(snirf_file_l[0])
 
 	for f in snirf_file_l:
 		raw = read_snirf(f)
-
-		get_snirf_metadata(f)
 
 		# Define the roi here!!!
 		if first_trigger is not None and last_trigger is not None:

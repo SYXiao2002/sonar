@@ -9,19 +9,12 @@ import hashlib
 import os
 
 from matplotlib import pyplot as plt
+import seaborn as sns
 
+from sonar.core.color import get_color_from_label
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.utils.topomap_plot import get_meta_data, normalize_positions, plot_anatomical_labels
-import seaborn as sns
-
-color_pool = sns.color_palette("tab20")  # 或 "Set2", "Paired", "husl", "dark", "colorblind"
-num_colors = len(color_pool)
-
-def get_color_from_label(label):
-	# Use md5 for a stable hash
-	hash_val = int(hashlib.md5(label.encode()).hexdigest(), 16)
-	return color_pool[hash_val % num_colors]
 
 class WaveformTopomap:
 	def __init__(self, dataset, region_selector, metadata_path, output_dir):

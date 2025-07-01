@@ -9,12 +9,9 @@ Description:
 	labels and supports comparison of multiple subjects.
 """
 
-from calendar import c
-from matplotlib import pyplot as plt
 import numpy as np
-import pandas as pd
 
-def normalize_positions(pos, width, height, x_range=(0.02, 0.98), y_range=(0.05, 0.9)):
+def normalize_positions(pos, width, height, x_range=(0.01, 0.99), y_range=(0.05, 0.9), reverse=True):
 	"""
 	Normalize raw channel positions to fit within a canvas while reserving padding space 
 	for inset plots, ensuring all subplots stay within bounds.
@@ -44,8 +41,22 @@ def normalize_positions(pos, width, height, x_range=(0.02, 0.98), y_range=(0.05,
 
 	# Clip to [padding, 1 - padding] to stay within canvas
 	safe_pos = np.clip(safe_pos, padding, 1 - padding)
+	if reverse:
+		safe_pos = reverse_xy(safe_pos)
 	return safe_pos
 
+def reverse_xy(pos):
+	"""
+	Flip x and y coordinates (mirror around center)
+	in a (n, 2) array.
+	"""
+	x = pos[:, 0]
+	y = pos[:, 1]
+
+	x_flipped = x.max() + x.min() - x
+	y_flipped = y.max() + y.min() - y
+
+	return np.column_stack((x_flipped, y_flipped))
 
 def get_xlim_range(*, center_sec=None, length_sec=None, start_sec=None, end_sec=None):
 	"""
@@ -75,23 +86,6 @@ def get_xlim_range(*, center_sec=None, length_sec=None, start_sec=None, end_sec=
 		raise ValueError("Must provide either (center_sec & length_sec), (start_sec & end_sec), or (start_sec & length_sec)")
 
 	return (start_sec, end_sec), center_sec
-
-
-def get_meta_data(metadata_path):
-	"""
-	Load channel metadata from CSV file.
-
-	Parameters:
-		metadata_path (str): Path to metadata CSV file containing 'x' and 'y' columns
-
-	Returns:
-		ndarray: (n, 2) array of channel positions
-	"""
-	df = pd.read_csv(metadata_path)
-	ch_pos_l = df[['x', 'y']].values
-	ch_name_l = df['channel']
-	return ch_pos_l, ch_name_l
-
 
 def plot_labels(plt, label_template):
 	"""
@@ -130,7 +124,7 @@ def plot_anatomical_labels(plt, template_idx=0):
 		label_template = [
 			{'text': 'Left', 'position': (0.02, 0.5), 'rotation': 90},
 			{'text': 'Right', 'position': (0.98, 0.5), 'rotation': -90},
-			{'text': 'Nose', 'position': (0.5, 0.02)}
+			{'text': 'Nose', 'position': (0.5, 0.9)}
 		]
 	elif template_idx == 2:
 		label_template = [
@@ -181,65 +175,3 @@ def create_inset_plots(fig, channel_pos_l, inset_width, inset_height, time, hbo_
 				bbox_to_anchor=(1.01, 0.5),
 				frameon=False
 			)
-
-
-def generate_hbo_data(n_channels, n_timepoints, time):
-	"""
-	Generate synthetic HbO signals with noise for demonstration/testing.
-
-	Parameters:
-		n_channels (int): Number of measurement channels
-		n_timepoints (int): Number of time points
-		time (ndarray): Time array
-
-	Returns:
-		ndarray: Simulated HbO data (n_channels x n_timepoints)
-	"""
-	phase = np.random.uniform(0, 2 * np.pi, size=(n_channels, 1))
-	amplitude = np.random.uniform(0.3, 0.7, size=(n_channels, 1))
-	base_signal = amplitude * np.sin(time[None, :] + phase)
-	noise = np.random.normal(scale=0.05, size=(n_channels, n_timepoints))
-	hbo_data = base_signal + noise
-	return hbo_data
-
-
-def test(sr=11):
-	"""
-	Test function to generate a full topographic plot with inset HbO traces. It uses synthetic HbO data.
-
-	Parameters:
-		sr (int): Sampling rate for simulated data
-	"""
-	metadata_path = 'res/test/snirf_metadata.csv'
-	xlim_range, _ = get_xlim_range(start_sec=0, length_sec=50)
-	ch_pos_l, _ = get_meta_data(metadata_path)
-
-	inset_width = 0.06
-	inset_height = 0.08
-
-	ch_pos_l = normalize_positions(ch_pos_l, inset_width, inset_height)
-
-	n_channels = len(ch_pos_l)
-	length_sec = 25
-	n_timepoints = sr * length_sec
-	time = np.linspace(0, length_sec, n_timepoints)
-	hbo_data_l = [
-		generate_hbo_data(n_channels, n_timepoints, time),
-		generate_hbo_data(n_channels, n_timepoints, time),
-	]
-	subject_name_l = ['Test1', 'Test2']
-
-	fig = plt.figure(figsize=(12, 8))
-	main_ax = fig.add_subplot(111)
-	main_ax.axis('off')
-
-	create_inset_plots(fig, ch_pos_l, inset_width, inset_height, time, hbo_data_l, subject_name_l, xlim_range)
-	plot_anatomical_labels(plt)
-
-	fig.suptitle("Topomap: Transitions in Musical States", fontsize=14)
-	plt.tight_layout()
-	plt.show()
-
-
-if __name__ == '__main__':
-	test()
