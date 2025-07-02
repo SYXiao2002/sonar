@@ -4,6 +4,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 
+from sonar.core.color import get_color_from_label
 from sonar.preprocess.snirf_metadata import get_metadata_dict, normalize_metadata_pos_dict
 from sonar.utils.topomap_plot import plot_anatomical_labels
 
@@ -127,7 +128,35 @@ def parse_region_csv(region_csv_path):
 
 	return region_dict, region_column_name
 
-def plot_brain_region_labels(fig, metadata_dict, region_dict, box_width, box_height, br_thr, fontsize):
+def get_region_colors(region_dict, colormap=plt.cm.tab20):
+	all_regions = set()
+	for region_list in region_dict.values():
+		for region, _ in region_list:
+			all_regions.add(region)
+
+	color_pool = colormap.colors
+	region_list_sorted = sorted(list(all_regions))  # consistent ordering
+	region_colors = {
+		region: color_pool[i % len(color_pool)]
+		for i, region in enumerate(region_list_sorted)
+	}
+	return region_colors
+
+
+def plot_brain_region_labels(
+	fig,
+	metadata_dict,
+	region_dict,
+	box_width,
+	box_height,
+	br_thr,
+	fontsize,
+	n_subregions=3,
+	use_global_colors: bool = True
+):
+	if use_global_colors:
+		region_colors_global = get_region_colors(region_dict)
+
 	for ch_name, ch_metadata in metadata_dict.items():
 		ch_idx = ch_metadata.idx
 		x = ch_metadata.pos[0]
@@ -138,55 +167,50 @@ def plot_brain_region_labels(fig, metadata_dict, region_dict, box_width, box_hei
 		ax_inset = fig.add_axes([x0, y0, box_width, box_height])
 		ax_inset.set_xticks([])
 		ax_inset.set_yticks([])
-
 		ax_inset.set_title(f'Ch{ch_idx}', fontsize=7, pad=2)
 
-		# assert ch_name in region_dict
 		assert ch_name in region_dict, f"{ch_name} not found in region_dict{region_dict}"
-		max_lines = 3
-		top_regions = region_dict[ch_name][:max_lines]
+		top_regions = region_dict[ch_name][:n_subregions]
 
-		# Color map for regions
-		region_colors = {}
-		color_pool = plt.cm.tab20.colors  # 20 distinct colors
-
-		for idx, (region, _) in enumerate(top_regions):
-			if region not in region_colors:
-				region_colors[region] = color_pool[idx % len(color_pool)]
+		if use_global_colors:
+			region_colors = region_colors_global
+		else:
+			# Per-channel color assignment
+			region_colors = {}
+			color_pool = plt.cm.tab20.colors
+			for idx, (region, _) in enumerate(top_regions):
+				if region not in region_colors:
+					region_colors[region] = color_pool[idx % len(color_pool)]
 
 		# Draw color blocks from top to bottom
-		pathch_y_start = 1  # Start from the top
-
+		pathch_y_start = 1
 		for region, percent in top_regions:
-			if percent < br_thr/100:  # Skip regions with percentage less than threshold
+			if percent < br_thr / 100:
 				continue
 
-			height = percent  # Height proportional to the percentage
+			height = percent
 			ax_inset.add_patch(patches.Rectangle(
-				(0, pathch_y_start - height),  # Position from the top, reducing y_start
-				1, height,  # Full width, proportional height
+				(0, pathch_y_start - height),
+				1, height,
 				transform=ax_inset.transAxes,
-				color=region_colors[region],  # Color corresponding to the region
+				color=region_colors[region],
 				lw=0, edgecolor='none'
 			))
 
-			# Prepare the text with wrapping
 			text = f"({percent:.0%}) {region}"
-			wrapped_text = textwrap.fill(text, width=25)  # Wrap the text at 25 characters
+			wrapped_text = textwrap.fill(text, width=25)
 
-			# Add wrapped text in the left and top position of the color block
 			ax_inset.text(
-				0.05, pathch_y_start-0.05,  # Position text to the left and top
+				0.05, pathch_y_start - 0.05,
 				wrapped_text,
 				fontsize=fontsize,
-				va='top',  # Vertically aligned to the top of the block
-				ha='left',  # Horizontally aligned to the left of the block
-				wrap=False  # Don't wrap again, as we've already wrapped text
+				va='top',
+				ha='left',
+				wrap=False
 			)
-			pathch_y_start -= height  # Update y_start for the next block
-	
+			pathch_y_start -= height
 
-def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.07, box_height = 0.10):
+def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.07, box_height = 0.10, use_global_colors: bool = True):
 	fig = plt.figure(figsize=(12, 8))
 	main_ax = fig.add_subplot(111)
 	main_ax.axis('off')
@@ -194,7 +218,7 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.
 	dir_path = os.path.dirname(region_csv_path)
 
 	metadata_path = os.path.join(dir_path, 'snirf_metadata.csv')
-	metadata_dict = get_metadata_dict(metadata_path)
+	metadata_dict, _ = get_metadata_dict(metadata_path)
 	metadata_dict = normalize_metadata_pos_dict(metadata_dict, box_width, box_height)
 
 	region_dict, classifier_type = parse_region_csv(region_csv_path)
@@ -207,16 +231,28 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.
 		box_height,
 		br_thr,
 		fontsize=5,
+		use_global_colors=use_global_colors
 	)
 	plot_anatomical_labels(plt, template_idx=1)	
 	fig.suptitle(f"Topomap: Brain Regions >= {br_thr}%, from {classifier_type}", fontsize=14)
+	suffix = "global" if use_global_colors else "local"
 	if debug:
 		plt.show()
 	else:
-		plt.savefig(os.path.join(dir_path, f"{classifier_type}.png"), dpi = 600)
+		plt.savefig(os.path.join(dir_path, f"{classifier_type}_{suffix}.png"), dpi = 600)
 
 if __name__ == "__main__":
 	debug = False
-
+	use_global_colors = False
 	# topomap_brain_region('res/brain-region-sd/PFC+MOTOR/PFC+MOTOR_MRIcro.csv', debug=debug, box_width = 0.05, box_height = 0.07)
-	topomap_brain_region('res/brain-region-sd/PFC/Brodmann(MRIcro).csv', debug=debug)
+
+
+
+	# PFC
+	csv_l = ['res/brain-region-sd/PFC/AAL.csv', 
+	'res/brain-region-sd/PFC/Brodmann(MRIcro).csv',
+	'res/brain-region-sd/PFC/LPBA40.csv',
+	'res/brain-region-sd/PFC/Talairach.csv',
+	]
+	for csv in csv_l:
+		topomap_brain_region(csv, debug=debug, use_global_colors=use_global_colors)
