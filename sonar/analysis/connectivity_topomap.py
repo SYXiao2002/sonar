@@ -177,8 +177,7 @@ class ConnectivityTopomap():
 			for sub_idx, partition in subj_dict.items():
 				sub_label = self.dataset.label_l[sub_idx]
 
-				metadata_path = os.path.join(self.metadata_path)
-				metadata_dict, _ = get_metadata_dict(metadata_path)
+				metadata_dict, _ = get_metadata_dict(self.metadata_path)
 				metadata_dict = normalize_metadata_pos_dict(metadata_dict, box_width, box_height)
 
 				fig = plt.figure(figsize=(12, 8))
