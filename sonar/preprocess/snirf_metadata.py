@@ -10,26 +10,26 @@ class Metadata(NamedTuple):
 	pos: Tuple[float, float]
 	idx: float
 
-def get_metadata_dict(metadata_path: str) -> Dict[str, Metadata]:
+def get_metadata_dict(metadata_path: str) -> Tuple[Dict[str, Metadata], Dict[int, str]]:
 	"""
 	Load channel metadata from CSV file.
 
-	Parameters:
-		metadata_path (str): Path to metadata CSV file containing 'x', 'y', and 'channel_idx' columns
-
 	Returns:
-		Dict[str, Metadata]: Mapping from channel_name to Metadata(pos=(x, y), idx=channel_idx)
+		- name2meta: Dict[channel_name, Metadata]
+		- idx2name: Dict[channel_idx, channel_name]
 	"""
 	df = pd.read_csv(metadata_path)
 
-	result = {}
+	name2meta_d = {}
+	idx2name_d = {}
 	for _, row in df.iterrows():
-		ch = row['channel_name']
-		pos = (row['x'], row['y'])
-		idx = row['channel_idx']
-		result[ch] = Metadata(pos=pos, idx=idx)
+		ch_name = row['channel_name']
+		ch_pos = (row['x'], row['y'])
+		ch_idx = int(row['channel_idx'])
+		name2meta_d[ch_name] = Metadata(pos=ch_pos, idx=ch_idx)
+		idx2name_d[ch_idx] = ch_name
 
-	return result
+	return name2meta_d, idx2name_d
 
 def normalize_metadata_pos_dict(metadata_dict: Dict[str, Metadata], box_width: float, box_height: float) -> Dict[str, Metadata]:
 	# Step 1: Extract channel names and positions

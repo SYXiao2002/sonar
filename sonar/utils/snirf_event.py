@@ -198,7 +198,7 @@ def process_snirf(snirf_file):
 	# export_events_to_csv(raw, snirf_file)
 	
 def main():
-	dir = 'res/yuanqu-mne-cortivision/snirf'
+	dir = 'res/trainingcamp-mne-april-audience/snirf'
 
 	snirf_l=[]
 	for file in os.listdir(dir):    

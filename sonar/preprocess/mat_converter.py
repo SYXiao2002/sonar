@@ -12,7 +12,7 @@ from scipy.io import loadmat
 from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.normalization import z_score_normalization
 
-def mat_converter(mat_path, sub_label_l, time_shifting=0, crop_dict=None):
+def mat_converter(mat_path, sub_label_l, time_shifting=0, crop_dict=None, new_names=None):
 	# Load .mat file
 	data = loadmat(mat_path)
 	homer_data = data['Homer_Data'][0]
@@ -46,18 +46,25 @@ def mat_converter(mat_path, sub_label_l, time_shifting=0, crop_dict=None):
 		df = pd.DataFrame(hbo_with_time, columns=col_names)
 		output_path = os.path.join(hbo_raw_dir, f'{sub_label}.csv')
 
-		df['time'] = df['time'] + time_shifting
-
+		# Apply unit conversion
 		for col in df.columns:
 			if col != "time":  # Skip the "time" column
 				# 原始单位为mmol/L
 				df[col] *= 1e3  # Multiply by 1e3, 单位变成umol/L
 
-		# crop 
-		df_crop = df[(df["time"] >= region_selector.start_sec) & (df["time"] <= region_selector.end_sec)]
-		df_crop.to_csv(output_path, index=False)
+		# Crop
+		df_crop = df[(df["time"] >= region_selector.start_sec) & (df["time"] <= region_selector.end_sec)].copy()
 
+		# Adjust time: subtract first timestamp and add shifting
+		df_crop["time"] = df_crop["time"] - df_crop["time"].iloc[0] + time_shifting
+
+		if new_names is not None:
+			df_crop.columns = new_names
+
+		# Save to CSV
+		df_crop.to_csv(output_path, index=False)
 		print(f"Saved: {output_path}")
+
 
 	z_score_normalization(src_dir=hbo_raw_dir, tar_dir=hbo_normalized_dir)
 

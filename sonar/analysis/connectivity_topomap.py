@@ -3,15 +3,10 @@
 # 假设48CH，使用两两pearson相关，一共计算[C48, 2]=1128次，然后保存结果为csv (二维矩阵，48行，48列，对角线上为0，其他为pearson相关系数)
 # 第一种. 从csv中读取结果，然后apply Louvain community detection，尝试分割脑区
 # 第二张. 从csv中读取结果，然后筛选出 top-K 强连接，只显示有意义的边，避免信息过载。
-
-
-
-from curses import meta
 import os
 from typing import Dict, Optional, Sequence
 
 from matplotlib import pyplot as plt
-from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -20,7 +15,6 @@ import networkx as nx
 
 from sonar.core.color import get_color_from_label
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
-from sonar.core.region_selector import RegionSelector
 from sonar.preprocess.snirf_metadata import get_metadata_dict, load_idx_remap_dict, normalize_metadata_pos_dict
 from sonar.preprocess.sv_marker import Annotation
 from sonar.utils.topomap_plot import plot_anatomical_labels
@@ -120,7 +114,8 @@ class ConnectivityTopomap():
 				label_map = dict(enumerate(channel_labels))
 
 				# Run Louvain
-				partition = community_louvain.best_partition(G, weight='weight')
+				partition = community_louvain.best_partition(G, weight='weight', random_state=42)
+
 
 				# Stabilize community id by sorting node names within each community
 				from collections import defaultdict
@@ -183,7 +178,7 @@ class ConnectivityTopomap():
 				sub_label = self.dataset.label_l[sub_idx]
 
 				metadata_path = os.path.join(self.metadata_path)
-				metadata_dict = get_metadata_dict(metadata_path)
+				metadata_dict, _ = get_metadata_dict(metadata_path)
 				metadata_dict = normalize_metadata_pos_dict(metadata_dict, box_width, box_height)
 
 				fig = plt.figure(figsize=(12, 8))
