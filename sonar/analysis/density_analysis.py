@@ -142,7 +142,10 @@ class DensityAnalyzer:
 
 		:return: List of detected peak segments.
 		"""
-		self.smoothed = uniform_filter1d(self.values, size=self.smooth_size)
+		if self.smoothed is not None:
+			self.smoothed = uniform_filter1d(self.values, size=self.smooth_size)
+		else:
+			self.smoothed = self.values
 		self.segments = self._find_peaks_above_threshold(self.times, self.smoothed)
 
 	def plot(self, show=True, save_path=None):

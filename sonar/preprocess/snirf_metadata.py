@@ -31,13 +31,13 @@ def get_metadata_dict(metadata_path: str) -> Tuple[Dict[str, Metadata], Dict[int
 
 	return name2meta_d, idx2name_d
 
-def normalize_metadata_pos_dict(metadata_dict: Dict[str, Metadata], box_width: float, box_height: float) -> Dict[str, Metadata]:
+def normalize_metadata_pos_dict(metadata_dict: Dict[str, Metadata], box_width: float, box_height: float, reverse) -> Dict[str, Metadata]:
 	# Step 1: Extract channel names and positions
 	ch_names = list(metadata_dict.keys())
 	pos_l = np.array([metadata_dict[ch].pos for ch in ch_names])
 
 	# Step 2: Normalize positions
-	normed_pos_l = normalize_positions(pos_l, box_width, box_height)
+	normed_pos_l = normalize_positions(pos_l, box_width, box_height, reverse=reverse)
 
 	# Step 3: Reconstruct metadata_dict with updated positions
 	normed_dict = {

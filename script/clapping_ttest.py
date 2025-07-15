@@ -82,7 +82,7 @@ def permutation_test(correlation, time_series, n_events, pre_sec, post_sec, tota
 	p_value = (np.sum(np.abs(rand_diffs) >= np.abs(true_diff)) + 1) / (len(rand_diffs) + 1)
 	return rand_diffs, p_value
 
-def main(ds_dir):
+def main(ds_dir, n_perm=10):
 	pre_sec = 20
 	post_sec = 20
 	total_win = pre_sec + post_sec
@@ -97,7 +97,7 @@ def main(ds_dir):
 	w_stat, p_w = wilcoxon(post_vals, pre_vals)
 	# Permutation test
 	true_diff = post_vals.mean() - pre_vals.mean()
-	rand_diffs, p_perm = permutation_test(correlation, time_series, len(epochs), pre_sec, post_sec, total_win, true_diff)
+	rand_diffs, p_perm = permutation_test(correlation, time_series, len(epochs), pre_sec, post_sec, total_win, true_diff, n_perm)
 
 	print(f"Paired t-test: t = {t_stat:.3f}, p = {p_t:.4f}")
 	print(f"Wilcoxon test: W = {w_stat:.3f}, p = {p_w:.4f}")

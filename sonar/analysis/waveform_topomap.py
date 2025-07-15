@@ -20,7 +20,7 @@ class WaveformTopomap:
 		self.dataset: DatasetLoader = dataset
 		self.region_selector: RegionSelector = region_selector
 		self.metadata_path = metadata_path
-		self.output_dir = output_dir
+		self.output_dir = os.path.join(output_dir, 'fig_waveform')
 		self.inset_width = inset_width
 		self.inset_height = inset_height
 		os.makedirs(self.output_dir, exist_ok=True)
@@ -46,7 +46,7 @@ class WaveformTopomap:
 
 			for sub_label in sub_label_l:
 				color = get_color_from_label(sub_label)
-				ax_inset.plot(self.dataset['time'], self.dataset[sub_label][i], label=sub_label, color=color, linewidth=0.7, zorder=3)
+				ax_inset.plot(self.dataset['time'], self.dataset[sub_label][i], label=sub_label, color=color, linewidth=2, zorder=3)
 
 			ax_inset.set_ylim(-1, 1)
 			ax_inset.grid(True)
@@ -107,6 +107,7 @@ class WaveformTopomap:
 		plt.tight_layout()
 		path = os.path.join(self.output_dir, f'waveform_topomap_{self.region_selector.start_sec:.0f}-{self.region_selector.end_sec:.0f}s.png')
 		plt.savefig(path, dpi=600)
+		# plt.show()
 
 	def example():
 		sub_label_l = ['test-sub1']

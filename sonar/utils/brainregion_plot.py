@@ -1,4 +1,5 @@
 import os
+import re
 import textwrap
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -67,7 +68,7 @@ def map_channel_idx_to_y_axis(df: pd.DataFrame, tol: float = 1e-6) -> dict:
 	# Compute median x to define midline
 	x_median = df['x'].median()
 
-	# Label channel position
+	# Label channel position (HC layout, down is nose, left is right hemisphere)
 	def classify_channel(x):
 		if abs(x - x_median) < tol:
 			return 'midline'
@@ -80,8 +81,8 @@ def map_channel_idx_to_y_axis(df: pd.DataFrame, tol: float = 1e-6) -> dict:
 	df['label'] = df['x'].apply(classify_channel)
 
 	# Sort by position rules
-	right = df[df['label'] == 'right'].sort_values(by=['y', 'x'], ascending=[True, False])
-	left = df[df['label'] == 'left'].sort_values(by=['y', 'x'], ascending=[True, True])
+	right = df[df['label'] == 'right'].sort_values(by=['y', 'x'], ascending=[False, False])
+	left = df[df['label'] == 'left'].sort_values(by=['y', 'x'], ascending=[True, False])
 	midline = df[df['label'] == 'midline'].sort_values(by='x')
 
 	# Concatenate in y-axis order
@@ -167,7 +168,8 @@ def plot_brain_region_labels(
 		ax_inset = fig.add_axes([x0, y0, box_width, box_height])
 		ax_inset.set_xticks([])
 		ax_inset.set_yticks([])
-		ax_inset.set_title(f'Ch{ch_idx}', fontsize=7, pad=2)
+		# ax_inset.set_title(f'Ch{ch_idx}', fontsize=7, pad=2)
+		ax_inset.set_title(f'{ch_name}', fontsize=7, pad=2)
 
 		assert ch_name in region_dict, f"{ch_name} not found in region_dict{region_dict}"
 		top_regions = region_dict[ch_name][:n_subregions]
@@ -210,7 +212,7 @@ def plot_brain_region_labels(
 			)
 			pathch_y_start -= height
 
-def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.07, box_height = 0.10, use_global_colors: bool = True):
+def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.07, box_height = 0.10, use_global_colors: bool = True, reverse=True):
 	fig = plt.figure(figsize=(12, 8))
 	main_ax = fig.add_subplot(111)
 	main_ax.axis('off')
@@ -219,7 +221,7 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.
 
 	metadata_path = os.path.join(dir_path, 'snirf_metadata.csv')
 	metadata_dict, _ = get_metadata_dict(metadata_path)
-	metadata_dict = normalize_metadata_pos_dict(metadata_dict, box_width, box_height)
+	metadata_dict = normalize_metadata_pos_dict(metadata_dict, box_width, box_height, reverse=reverse)
 
 	region_dict, classifier_type = parse_region_csv(region_csv_path)
 
@@ -233,7 +235,10 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.
 		fontsize=5,
 		use_global_colors=use_global_colors
 	)
-	plot_anatomical_labels(plt, template_idx=1)	
+	if reverse:
+		plot_anatomical_labels(plt, template_idx=1)	
+	else:
+		plot_anatomical_labels(plt, template_idx=0)
 	fig.suptitle(f"Topomap: Brain Regions >= {br_thr}%, from {classifier_type}", fontsize=14)
 	suffix = "global" if use_global_colors else "local"
 	if debug:
@@ -243,16 +248,18 @@ def topomap_brain_region(region_csv_path, br_thr=15, debug=False, box_width = 0.
 
 if __name__ == "__main__":
 	debug = False
-	use_global_colors = False
+	use_global_colors = True
 	# topomap_brain_region('res/brain-region-sd/PFC+MOTOR/PFC+MOTOR_MRIcro.csv', debug=debug, box_width = 0.05, box_height = 0.07)
 
 
 
 	# PFC
-	csv_l = ['res/brain-region-sd/PFC/AAL.csv', 
-	'res/brain-region-sd/PFC/Brodmann(MRIcro).csv',
-	'res/brain-region-sd/PFC/LPBA40.csv',
-	'res/brain-region-sd/PFC/Talairach.csv',
+	csv_l = [
+		'res/brain-region-sd/temp/Brodmann(MRIcro).csv',
+		# 'res/brain-region-sd/PFC/AAL.csv', 
+		# 'res/brain-region-sd/PFC/Brodmann(MRIcro).csv',
+		# 'res/brain-region-sd/PFC/LPBA40.csv',
+		# 'res/brain-region-sd/PFC/Talairach.csv',
 	]
 	for csv in csv_l:
-		topomap_brain_region(csv, debug=debug, use_global_colors=use_global_colors)
+		topomap_brain_region(csv, debug=debug, use_global_colors=use_global_colors, reverse=True)

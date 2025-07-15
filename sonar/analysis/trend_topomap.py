@@ -10,8 +10,6 @@ from functools import lru_cache
 import hashlib
 import os
 import matplotlib
-from matplotlib import axes
-from matplotlib.pylab import f
 import pandas as pd
 from tqdm import tqdm
 from typing import Dict, Literal, Optional, Sequence
@@ -19,13 +17,13 @@ from typing import Dict, Literal, Optional, Sequence
 import numpy as np
 from matplotlib import pyplot as plt
 
-from sonar.analysis.high_density_analysis import HighDensityAnalyzer
 from sonar.analysis.density_analysis import DensityAnalyzer, HighDensity
 from sonar.core.analysis_context import SubjectChannel
 from sonar.core.dataset_loader import DatasetLoader, get_dataset
 from sonar.core.region_selector import RegionSelector
 from sonar.core.window_selector import WindowSelector
 from sonar.preprocess.normalization import normalize_to_range
+from sonar.preprocess.snirf_metadata import get_metadata_dict
 from sonar.preprocess.sv_marker import Annotation
 from sonar.utils.brainregion_plot import annotate_yrange, map_channel_idx_to_y_axis
 from sonar.utils.file_helper import clear_folder
@@ -54,7 +52,8 @@ class TrendTopomap():
 		debug: bool = False,
 		high_density_thr: int = 30,
 		max_value: Optional[int] = None,
-		heartrate_dir: Optional[str] = None
+		heartrate_dir: Optional[str] = None,
+		metadata_path: Optional[str] = None
 	):
 		self.dataset = dataset
 		self.mode = mode
@@ -66,6 +65,7 @@ class TrendTopomap():
 		self.thr = high_density_thr
 		self.heartrate_dir = heartrate_dir
 		self.max_value = max_value
+		self.metadata_path = metadata_path
 
 		os.makedirs(self.output_dir, exist_ok=True)
 
@@ -260,7 +260,7 @@ class TrendTopomap():
 				x_vals = arr[:, 0]
 				y_vals = arr[:, 1]
 
-				density_analyzer = DensityAnalyzer(x_vals, y_vals, smooth_size=20, threshold=thr, max_value=self.max_value)
+				density_analyzer = DensityAnalyzer(x_vals, y_vals, smooth_size=50, threshold=thr, max_value=self.max_value)
 
 				self._computed_high_density[sub_idx] = density_analyzer
 
@@ -274,11 +274,11 @@ class TrendTopomap():
 			csv_path = os.path.join(density_csv_dir, f"{label}.csv")
 			HighDensity.save_sequence_to_csv(density_analyser.segments, csv_path)
 
-	def plot_trends(self, metadata_path, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
+	def plot_trends(self, sub_idx=None, out_folder='fig_trends', dpi=300, return_fig=False):
 		if sub_idx is None:
 			sub_idx_l = range(len(self.dataset.label_l))
 			for sub_idx in sub_idx_l:
-				self.plot_trends(sub_idx=sub_idx, out_folder=out_folder, dpi=dpi, return_fig=False, metadata_path=metadata_path)
+				self.plot_trends(sub_idx=sub_idx, out_folder=out_folder, dpi=dpi, return_fig=False)
 			return
 
 		trends_fig_dir = os.path.join(self.output_dir, out_folder)
@@ -304,7 +304,8 @@ class TrendTopomap():
 		)
 		fig.subplots_adjust(left=0.1)
 
-		df = pd.read_csv(metadata_path)
+		# name2meta_d, idx2name_d = get_metadata_dict(self.metadata_path)
+		df = pd.read_csv(self.metadata_path)
 		idx2y, mapped_df = map_channel_idx_to_y_axis(df)
 		inv_dict = {v: k for k, v in idx2y.items()}
 
@@ -320,19 +321,51 @@ class TrendTopomap():
 			annotate_yrange(25, 47, 'Right Hemisphere', offset=width, width=width, text_kwargs={'rotation': 'vertical'}, ax=ax)
 			annotate_yrange(22.5, 24.5, 'Middle', offset=0, width=width*2, text_kwargs={'rotation': 'horizontal', 'fontsize': 9}, ax=ax)
 
-			annotate_yrange(0, 3, 'row\n5', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(4, 7, 'row\n4', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(8, 12, 'row\n3', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(13, 17, 'row\n2', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(18, 22, 'row\n1', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			
-			annotate_yrange(44, 47, 'row\n5', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(40, 43, 'row\n4', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(35, 39, 'row\n3', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(30, 34, 'row\n2', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
-			annotate_yrange(25, 29, 'row\n1', offset=0, width=width, text_kwargs={'rotation': 'vertical', 'fontsize': 9}, ax=ax)
+			row_heights = [5, 5, 5, 4, 4]	# 5 行，对应 row 5 → row 1
 
-			ax.hlines(y=[-0.5, 3.5, 7.5, 12.5, 17.5,  29.5, 34.5, 39.5, 43.5, 47.5], xmin=self.dataset['time'][0], xmax=self.dataset['time'][-1], colors='gray', linewidth=1.5, linestyle='solid', alpha=1, zorder=3)
+			d = [0]
+			for h in row_heights:
+				d.append(d[-1] + h)
+			row_ranges_top = [(d[i], d[i+1] - 1) for i in range(len(row_heights))]
+
+			offset = 25
+			row_ranges_bottom = [(y0 + offset, y1 + offset) for (y0, y1) in reversed(row_ranges_top)]
+
+			def annotate_rows(ranges, reverse_label=False):
+				for i, (ymin, ymax) in enumerate(ranges):
+					row_num = len(ranges) - i if reverse_label else i + 1
+					annotate_yrange(
+						ymin, ymax, f'row\n{row_num}',
+						offset=0, width=width,
+						text_kwargs={'rotation': 'vertical', 'fontsize': 9},
+						ax=ax
+					)
+
+			# 应用
+			annotate_rows(row_ranges_top, reverse_label=True)
+			annotate_rows(row_ranges_bottom, reverse_label=True)
+
+			d = [0]
+			for h in row_heights:
+				d.append(d[-1] + h)	# d = [0, 4, 8, 13, 18, 23]
+
+			hlines_top = [v - 0.5 for v in d]	# 对应 [–0.5, 3.5, ..., 22.5]
+
+			offset = 25
+			hlines_bottom = [offset + (d[-1] - v) - 0.5 for v in d]	# 镜像 + 偏移
+
+			hlines_y = hlines_top + hlines_bottom
+
+			ax.hlines(
+				y=hlines_y,
+				xmin=self.dataset['time'][0],
+				xmax=self.dataset['time'][-1],
+				colors='gray',
+				linewidth=1.5,
+				linestyle='solid',
+				alpha=1,
+				zorder=3
+			)
 			ax.hlines(y=[22.5, 24.5], xmin=self.dataset['time'][0], xmax=self.dataset['time'][-1], colors='black', linewidth=1.5, linestyle='solid', alpha=1, zorder=3)
 
 			ax.yaxis.set_ticks_position('right')
@@ -341,25 +374,25 @@ class TrendTopomap():
 			ax.set_yticks([i for i in range(0, n_channels, 1)])
 			ax.set_yticklabels([f'ch{inv_dict[i]}' for i in range(0, n_channels, 1)], fontsize=7)
 
-
 		# --- optimized trend drawing ---
 		sub_trends: Sequence[Trend] = self._computed_trends.get(sub_idx, [])
 		lines_xmin, lines_xmax, lines_y = [], [], []
 		centers_x, centers_y, center_sizes = [], [], []
-				   
+		
 		if len(sub_trends) == 48:
 			pre_frontal_sd_category(ax=axs[0])
 		for ch_idx, ch_trends in enumerate(sub_trends):
 			for trend in ch_trends:
 				if not (self.region_selector.start_sec <= trend.center_sec <= self.region_selector.end_sec):
 					continue
+				y = idx2y[ch_idx+1]
 				# Accumulate hline data
 				lines_xmin.append(trend.start_sec)
 				lines_xmax.append(trend.end_sec)
-				lines_y.append(idx2y[ch_idx+1])
+				lines_y.append(y)
 				# Accumulate scatter data
 				centers_x.append(trend.center_sec)
-				centers_y.append(idx2y[ch_idx+1])
+				centers_y.append(y)
 				center_sizes.append(trend.height)
 
 		# Draw all trend segments together
@@ -405,6 +438,7 @@ class TrendTopomap():
 		# --- ax3: Density Plot ---
 		ax=axs[2]
 		ax.set_ylabel(f"Density\nwindow={self.intenisty_window_selector.window_size:.1f}s\nstep={self.intenisty_window_selector.step:.1f}s")
+
 
 		density = self._computed_density.get(sub_idx, {})
 		if density:
@@ -452,6 +486,10 @@ class TrendTopomap():
 				loc="upper left",          # 图例的锚点位置（相对于 bbox_to_anchor）
 				borderaxespad=0.           # 图例与轴边界的间距
 			)
+			ax.set_ylim(0, n_channels)
+			ax.set_yticks([0, thr, n_channels])
+			ax.set_yticklabels([0, thr, n_channels])
+
 		# --- ax4: Trend Height ---
 		# ax=axs[3]
 		# ax.set_ylabel(f"MTS\nHeight(uM)")
@@ -539,20 +577,18 @@ class TrendTopomap():
 
 				peak.channel_status = channel_status
 
-	def permutation_test(self):
-		HighDensityAnalyzer(ds_dir=self.output_dir)
-
 	@staticmethod
 	def example_run(ds_dir='test'):
 		clear_folder(os.path.join('out', ds_dir))
-		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=True)
+		dataset, annotations = get_dataset(ds_dir=os.path.join('res', ds_dir), load_cache=False, use_raw=False)
 
 		window_selector = WindowSelector(window_size=1, step=0.1)
 
 		trend_topomap = TrendTopomap(output_dir=os.path.join('out', ds_dir), 
 							   dataset=dataset, density_window_selector=window_selector, mode='increasing', 
 							   min_duration=1.6, annotations=annotations, region_selector=None, debug=False,
-							   high_density_thr=30)
+							   high_density_thr=30,
+							   metadata_path=os.path.join('res', ds_dir, 'snirf', 'snirf_metadata.csv'))
 
 		trend_topomap.plot_trends()
 
