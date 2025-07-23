@@ -7,7 +7,7 @@ import os
 from sonar.utils.topomap_plot import normalize_positions
 
 class Metadata(NamedTuple):
-	pos: Tuple[float, float]
+	pos: Tuple[float, float, float]
 	idx: float
 
 def get_metadata_dict(metadata_path: str) -> Tuple[Dict[str, Metadata], Dict[int, str]]:
@@ -24,7 +24,7 @@ def get_metadata_dict(metadata_path: str) -> Tuple[Dict[str, Metadata], Dict[int
 	idx2name_d = {}
 	for _, row in df.iterrows():
 		ch_name = row['channel_name']
-		ch_pos = (row['x'], row['y'])
+		ch_pos = (row['x'], row['y'], row['z'])
 		ch_idx = int(row['channel_idx'])
 		name2meta_d[ch_name] = Metadata(pos=ch_pos, idx=ch_idx)
 		idx2name_d[ch_idx] = ch_name
