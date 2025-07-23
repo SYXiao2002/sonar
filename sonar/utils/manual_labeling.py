@@ -24,7 +24,6 @@ class FNIRSLabelingTool:
 	def _init_plot(self):
 		self.fig, self.ax = plt.subplots(figsize=(8, 8))
 		self.ax.imshow(self.img)
-		self.ax.set_ylim(bottom=self.img.shape[0], top=0)
 		self.ax.set_title("Move mouse to preview, left-click to select. Press Enter when done.")
 
 	def _connect_events(self):
@@ -101,5 +100,6 @@ class FNIRSLabelingTool:
 
 
 if __name__ == "__main__":
-	tool = FNIRSLabelingTool('res/brain-region-sd/temp/1.png')  # replace with your image path
+	tool = FNIRSLabelingTool('res/brain-region-sd/temp/sd.png')  # replace with your image path
+	# 注意输出，是以左上角为origin
 	tool.run()

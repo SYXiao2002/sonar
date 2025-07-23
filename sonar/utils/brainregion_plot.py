@@ -255,6 +255,7 @@ if __name__ == "__main__":
 
 	# PFC
 	csv_l = [
+		# 'res/brain-region-sd/temp/Brodmann(MRIcro).csv',
 		'res/brain-region-sd/temp/Brodmann(MRIcro).csv',
 		# 'res/brain-region-sd/PFC/AAL.csv', 
 		# 'res/brain-region-sd/PFC/Brodmann(MRIcro).csv',
